@@ -1,0 +1,112 @@
+# Küt — üretim yığını.
+#
+# VPS'te tek komut yeter:
+#   docker compose up -d --build
+#
+# İki servis:
+#   traefik  → TLS sonlandırma + yönlendirme (Let's Encrypt otomatik)
+#   sunucu   → @kut/server
+#
+# Veritabanı BURADA DEĞİL: MongoDB Atlas'ta (bulut), development ve
+# production AYNI cluster'ı paylaşıyor. Hangi veritabanına yazılacağını
+# `NODE_ENV` belirliyor (packages/server/src/veritabani.ts — `dbName`
+# seçeneği). VPS'te kendi Mongo'nu barındırmanın getirisi yok: Atlas'ın
+# ücretsiz katmanı bu ölçek için yeterli, yedekleme ve güncellemeyi Atlas
+# üstleniyor ve VPS'in belleği/diski sunucu sürecine kalıyor.
+#
+# Değerler `.env` dosyasından gelir; örneği `.env.example`.
+
+name: kut
+
+services:
+  traefik:
+    image: traefik:v3.7
+    container_name: kut-traefik
+    restart: unless-stopped
+    command:
+      # Docker'daki servisleri kendisi keşfetsin.
+      - --providers.docker=true
+      # Yalnızca `traefik.enable=true` etiketi olanlar yayınlansın; bir servisi
+      # yanlışlıkla internete açmanın en kolay yolu bunu unutmaktır.
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=kut-ag
+
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      # HTTP'ye gelen herkes HTTPS'e gitsin. Mobil taraf zaten wss:// istiyor.
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.web.http.redirections.entrypoint.permanent=true
+
+      # Let's Encrypt — HTTP-01 doğrulaması. 80 portu açık olmak zorunda.
+      - --certificatesresolvers.lets.acme.email=${ACME_EPOSTA}
+      - --certificatesresolvers.lets.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.lets.acme.httpchallenge=true
+      - --certificatesresolvers.lets.acme.httpchallenge.entrypoint=web
+
+      - --log.level=INFO
+      - --accesslog=false
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      # Traefik konteynerleri görebilsin diye. SALT OKUNUR: Docker soketine
+      # yazma erişimi vermek kök yetkisi vermekle aynı şeydir.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Sertifikalar burada durur; silinirse Let's Encrypt limitine takılırsın.
+      - traefik-sertifika:/letsencrypt
+    networks:
+      - kut-ag
+    healthcheck:
+      test: ['CMD', 'traefik', 'healthcheck', '--ping']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  sunucu:
+    build:
+      context: .
+      dockerfile: packages/server/Dockerfile
+    container_name: kut-sunucu
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      # Atlas cluster'ı — development ile AYNI URI. Hangi veritabanına
+      # yazılacağını yukarıdaki NODE_ENV belirliyor (dbName seçeneği).
+      MONGO_URI: ${MONGO_URI}
+      JWT_GIZLI: ${JWT_GIZLI}
+      JWT_OMRU: ${JWT_OMRU:-30d}
+      CORS_KAYNAKLARI: ${CORS_KAYNAKLARI:-}
+      # Gizlilik / koşullar / destek sayfaları bunları kullanıyor.
+      UYGULAMA_ADI: ${UYGULAMA_ADI:-Küt}
+      ALAN_ADI: ${ALAN_ADI}
+      DESTEK_EPOSTA: ${DESTEK_EPOSTA:-}
+      # Parola sıfırlama e-postası. Boşsa sunucu yine açılır, yalnızca
+      # sıfırlama çalışmaz (servisler/postaServisi.ts).
+      SMTP_SUNUCU: ${SMTP_SUNUCU:-}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_GUVENLI: ${SMTP_GUVENLI:-true}
+      SMTP_KULLANICI: ${SMTP_KULLANICI:-}
+      SMTP_SIFRE: ${SMTP_SIFRE:-}
+      SMTP_GONDEREN: ${SMTP_GONDEREN:-}
+    networks:
+      - kut-ag
+    # Sunucunun portu da dışarı açılmıyor: dışarıdan gelen her istek
+    # Traefik'ten geçer, böylece TLS'i atlamanın yolu kalmaz.
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=kut-ag
+      - traefik.http.routers.kut.rule=Host(`${ALAN_ADI}`)
+      - traefik.http.routers.kut.entrypoints=websecure
+      - traefik.http.routers.kut.tls.certresolver=lets
+      - traefik.http.services.kut.loadbalancer.server.port=4000
+      # WebSocket için ek ayar GEREKMEZ: Traefik HTTP/1.1 Upgrade başlığını
+      # kendiliğinden geçirir, socket.io olduğu gibi çalışır.
+
+networks:
+  kut-ag:
+    name: kut-ag
+
+volumes:
+  traefik-sertifika:

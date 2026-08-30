@@ -1,0 +1,49 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "kut-sunucu",
+      "runtimeExecutable": "corepack",
+      "runtimeArgs": [
+        "pnpm",
+        "--filter",
+        "@kut/server",
+        "dev"
+      ],
+      "port": 4000
+    },
+    {
+      "name": "kut-web",
+      "runtimeExecutable": "corepack",
+      "runtimeArgs": [
+        "pnpm",
+        "--filter",
+        "@kut/mobile",
+        "exec",
+        "expo",
+        "start",
+        "--offline",
+        "--web",
+        "--port",
+        "8097"
+      ],
+      "port": 8097
+    },
+    {
+      "name": "kut-expo",
+      "runtimeExecutable": "corepack",
+      "runtimeArgs": [
+        "pnpm",
+        "--filter",
+        "@kut/mobile",
+        "exec",
+        "expo",
+        "start",
+        "--offline",
+        "--port",
+        "8081"
+      ],
+      "port": 8081
+    }
+  ]
+}

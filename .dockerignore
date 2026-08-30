@@ -1,0 +1,17 @@
+# Build context kok dizin; imaja gereksiz hicbir sey girmesin.
+**/node_modules
+**/dist
+**/.expo
+**/*.log
+.git
+.env
+.env.*
+!.env.example
+
+# Mobil uygulamanin kodu sunucu imajina girmiyor. Manifesti Dockerfile
+# tarafindan ayrica kopyalaniyor (lockfile onu taniyor).
+apps/mobile/src
+apps/mobile/assets
+apps/mobile/App.tsx
+apps/mobile/app.json
+apps/mobile/index.ts

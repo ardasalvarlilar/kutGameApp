@@ -1,0 +1,49 @@
+{
+  "expo": {
+    "name": "Küt",
+    "slug": "kut",
+    "version": "1.0.0",
+    "orientation": "landscape",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.kut.mobile",
+      "buildNumber": "1",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.kut.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "versionCode": 1,
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "backgroundColor": "#0b2739",
+    "plugins": [
+      "expo-audio",
+      "expo-secure-store"
+    ],
+    "primaryColor": "#f2c14e",
+    "description": "Okey taşlarıyla oynanan 16 turluk Küt oyunu — dört kişi, online.",
+    "extra": {
+      "eas": {
+        "projectId": "0e36841b-f2d2-4c9f-a13e-8082ac00003c"
+      }
+    },
+    "owner": "ardasalvarlilar"
+  }
+}

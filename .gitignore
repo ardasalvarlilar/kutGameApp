@@ -1,0 +1,24 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+
+# Sunucu
+.env
+.env.*
+!.env.example
+
+# Expo — `expo start` her calistiginda cache/log yaziyor; kok dizinde de
+# olusabiliyor (apps/mobile'a ek olarak, filtre komutlariyla calistirinca).
+.expo/
+
+# graphify — /graphify komutunun urettigi bilgi grafigi. Tamamen yeniden
+# olusturulabilir (`graphify update .`); diske ~5 MB, git'e girmesine gerek yok.
+graphify-out/
+
+# Test kapsam raporu (vitest --coverage calistirilirsa)
+coverage/

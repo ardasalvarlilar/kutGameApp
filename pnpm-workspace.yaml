@@ -1,0 +1,16 @@
+packages:
+  - 'packages/*'
+  - 'apps/*'
+
+# pnpm, script calistirmadan once bagimlilik durumunu dogrulamak icin bare
+# `pnpm` binary'sini ariyor. Bu depoda pnpm corepack uzerinden calisiyor
+# (global kurulum yok), bu yuzden kontrolu kapatiyoruz.
+verifyDepsBeforeRun: false
+
+# vitest'in esbuild'i kurulum betigini calistirabilsin diye izinli.
+allowBuilds:
+  esbuild: true
+
+# React Native'in paketleyicisi Metro sembolik linkleri iyi izlemiyor.
+# Duz (hoisted) node_modules ile npm'deki gibi davranir.
+nodeLinker: hoisted
