@@ -64,7 +64,19 @@ services:
     networks:
       - kut-ag
     healthcheck:
-      test: ['CMD', 'traefik', 'healthcheck', '--ping']
+      # `healthcheck` alt komutu ayrı bir surec olarak calisiyor; ana surecin
+      # `command:`deki argumanlarini miras almiyor. Ping'in hangi girisi
+      # kullandigini burada da tekrar soylemek gerekiyor, yoksa varsayilan
+      # (olmayan) bir portu dener ve hep basarisiz doner.
+      test:
+        [
+          'CMD',
+          'traefik',
+          'healthcheck',
+          '--ping',
+          '--ping.entrypoint=ping',
+          '--entrypoints.ping.address=:8082',
+        ]
       interval: 30s
       timeout: 5s
       retries: 3
