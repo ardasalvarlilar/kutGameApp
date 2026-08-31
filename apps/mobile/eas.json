@@ -9,7 +9,8 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_SUNUCU_URL": "http://192.168.1.20:4000"
-      }
+      },
+      "node": "22.19.0"
     },
     "preview": {
       "distribution": "internal",
@@ -18,13 +19,15 @@
       },
       "env": {
         "EXPO_PUBLIC_SUNUCU_URL": "https://xn--kt-xka.com"
-      }
+      },
+      "node": "22.19.0"
     },
     "production": {
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_SUNUCU_URL": "https://xn--kt-xka.com"
-      }
+      },
+      "node": "22.19.0"
     }
   },
   "submit": {
