@@ -46,6 +46,12 @@ services:
 
       - --log.level=INFO
       - --accesslog=false
+
+      # Docker healthcheck bunu kullanıyor (`traefik healthcheck --ping`).
+      # Ayrı, dışarı açılmayan bir giriş noktası: 80/443'ü meşgul etmesin.
+      - --ping=true
+      - --ping.entrypoint=ping
+      - --entrypoints.ping.address=:8082
     ports:
       - '80:80'
       - '443:443'
