@@ -1,7 +1,7 @@
 // Per dogrulama: kut, seri ve (tur 15'e ozgu) cift. KURALLAR.md §2
 
 import { birebirEsMi, benzersizMi, normalMi, okeyMi } from './tas';
-import { RENKLER, SAYILAR, type Sayi, type Tas, type TasId } from './tipler';
+import { RENKLER, SAYILAR, type Renk, type Sayi, type Tas, type TasId } from './tipler';
 
 export type PerTipi = 'kut' | 'seri' | 'cift';
 
@@ -23,6 +23,7 @@ export type PerHatasi =
   | 'seri-belirsiz'
   | 'cift-iki-tas-olmali'
   | 'cift-birebir-es-degil'
+  | 'yerdeki-okey-kimildatilamaz'
   | 'per-degil';
 
 export type PerSonucu =
@@ -169,6 +170,104 @@ export function perDogrula(tip: PerTipi, taslar: readonly Tas[]): PerSonucu {
 }
 
 /**
+ * KURALLAR.md §2 — seride her tasin ISGAL ETTIGI sayi.
+ *
+ * Seri taslarini [baslangic, baslangic + uzunluk) penceresine dizer: normal
+ * taslar kendi sayilarina oturur, okeyler geriye kalan bosluklari soldan saga
+ * doldurur. Belirsizlik varsa (`11 + 12 + okey` hem 10-11-12 hem 11-12-13
+ * olabilir) EN YUKSEK gecerli baslangic secilir — okey mumkun oldugunca saga
+ * duser, oyuncunun bekledigi yere.
+ *
+ * Yerlesim iki isi birden goruyor: perin GOSTERIMI (`perGoruntuSirasi`) ve
+ * okeyin neyi TEMSIL ETTIGI (§6). Ikisi ayni hesaptan ciktigi icin ekranda
+ * gorunen ile motorun okudugu hicbir zaman ayrisamaz.
+ *
+ * Gecerli bir seri degilse null.
+ */
+export function seriYerlesimi(taslar: readonly Tas[]): ReadonlyMap<TasId, number> | null {
+  if (!seriMu(taslar).ok) return null;
+
+  const normaller = taslar.filter(normalMi);
+  if (normaller.length === 0) return null;
+
+  const uzunluk = taslar.length;
+  const sayilar = normaller.map((tas) => tas.sayi);
+  const enKucuk = Math.min(...sayilar);
+  const enBuyuk = Math.max(...sayilar);
+
+  // seriMu ile ayni pencere hesabi; gecerlilik orada dogrulandi.
+  const altSinir = Math.max(1, enBuyuk - uzunluk + 1);
+  const ustSinir = Math.min(enKucuk, SAYILAR.length - uzunluk + 1);
+  if (altSinir > ustSinir) return null;
+
+  const baslangic = ustSinir;
+  const sayiyaGore = new Map(normaller.map((tas) => [tas.sayi as number, tas]));
+  const okeyler = taslar.filter(okeyMi);
+
+  const yerlesim = new Map<TasId, number>();
+  let sonrakiOkey = 0;
+  for (let sayi = baslangic; sayi < baslangic + uzunluk; sayi++) {
+    const normal = sayiyaGore.get(sayi);
+    if (normal !== undefined) {
+      yerlesim.set(normal.id, sayi);
+      continue;
+    }
+    const okey = okeyler[sonrakiOkey++];
+    if (okey === undefined) return null;
+    yerlesim.set(okey.id, sayi);
+  }
+  return yerlesim;
+}
+
+/**
+ * KURALLAR.md §6 — seride okeyin TEMSIL ETTIGI tas.
+ *
+ * "Seride okeyin temsil ettigi tas bellidir; onu koyup okeyi alirsin" (§6):
+ * serinin rengi ile okeyin yerlesimdeki sayisi. Kutte okeyin rengi belirsiz
+ * olabildigi icin (§6 — dort rengi tamamlama sarti) yalnizca seri icin var.
+ */
+export function okeyinTemsili(
+  per: Per,
+  okeyTasId: TasId,
+): { readonly renk: Renk; readonly sayi: Sayi } | null {
+  if (per.tip !== 'seri') return null;
+
+  const hedef = per.taslar.find((tas) => tas.id === okeyTasId);
+  if (hedef === undefined || !okeyMi(hedef)) return null;
+
+  const yerlesim = seriYerlesimi(per.taslar);
+  const sayi = yerlesim?.get(okeyTasId);
+  if (sayi === undefined) return null;
+
+  const renk = per.taslar.find(normalMi)?.renk;
+  if (renk === undefined) return null;
+
+  return { renk, sayi: sayi as Sayi };
+}
+
+/**
+ * KURALLAR.md §9 0.8 — yere inmis taslarin yeri degismez.
+ *
+ * Seriye tas eklendiginde perdeki OKEYIN temsil ettigi sayi degisemez. Normal
+ * taslar zaten kendi sayilarini tasidigi icin kayabilecek tek sey okeydir.
+ *
+ * Ornek: yerdeki `siyah4 + siyah5 + siyah6 + okey` serisinde okey siyah7'nin
+ * yerinde durur. `siyah2` eklemek okeyi 3'e kaydirir ve seriyi 2-3-4-5-6
+ * yapardi — bu, yerdeki peri yeniden dizmektir. `siyah3` ile `siyah8`
+ * serbesttir; ikisi de okeye dokunmaz.
+ */
+function okeylerYerindeKaliyorMu(eski: readonly Tas[], yeni: readonly Tas[]): boolean {
+  const eskiOkeyler = eski.filter(okeyMi);
+  if (eskiOkeyler.length === 0) return true;
+
+  const eskiYerlesim = seriYerlesimi(eski);
+  const yeniYerlesim = seriYerlesimi(yeni);
+  if (eskiYerlesim === null || yeniYerlesim === null) return false;
+
+  return eskiOkeyler.every((okey) => eskiYerlesim.get(okey.id) === yeniYerlesim.get(okey.id));
+}
+
+/**
  * KURALLAR.md §8 — bu tas yerdeki perlerden birine isliyor mu?
  * Isleyen bir tasi atmak ceza puani getirir.
  *
@@ -228,7 +327,17 @@ export function okeyCekilebilirMi(
   const yeni = [...per.taslar.filter((tas) => tas.id !== okeyTasId), ...adaylar];
 
   if (per.tip === 'seri') {
-    return adaylar.length === 1 && seriMu(yeni).ok;
+    // §6 — "Seride okeyin temsil ettigi tas bellidir; onu koyup okeyi alirsin."
+    // Baska bir tas okeyin yerine konamaz: `siyah4+5+6+okey(7)` serisinden
+    // okeyi yalnizca siyah7 ceker. siyah3 de gecerli bir seri birakirdi
+    // (3-4-5-6) ama bu, perin yerini kaydirmak olurdu (§9 0.8).
+    if (adaylar.length !== 1) return false;
+    const aday = adaylar[0];
+    if (aday === undefined || !normalMi(aday)) return false;
+    const temsil = okeyinTemsili(per, okeyTasId);
+    if (temsil === null) return false;
+    if (aday.renk !== temsil.renk || aday.sayi !== temsil.sayi) return false;
+    return seriMu(yeni).ok;
   }
 
   if (per.tip === 'kut') {
@@ -302,9 +411,13 @@ export function okeyCekmeAdaylari(
 /**
  * KURALLAR.md §6 — okey cekme.
  * Yerdeki perde duran okeyin yerine `aday` tasi konabilir mi?
- * Belirsiz durumlarda tahmin yurutmuyoruz: okeyi adayla degistirip peri
+ *
+ * Kutte belirsiz durumlarda tahmin yurutmuyoruz: okeyi adayla degistirip peri
  * yeniden dogruluyoruz. `kirmizi7 + siyah7 + okey` icin hem mavi7 hem sari7
  * kabul edilir — ikisi de peri gecerli birakir.
+ *
+ * Seride ise okeyin yeri bellidir (§6) ve kimildamaz (§9 0.8): oraya yalnizca
+ * temsil ettigi tas konabilir.
  */
 export function okeyYerineGecebilirMi(per: Per, okeyTasId: TasId, aday: Tas): boolean {
   if (okeyMi(aday)) return false;
@@ -312,13 +425,31 @@ export function okeyYerineGecebilirMi(per: Per, okeyTasId: TasId, aday: Tas): bo
   if (hedef === undefined || !okeyMi(hedef)) return false;
   if (per.taslar.some((t) => t.id === aday.id)) return false;
 
+  if (per.tip === 'seri') {
+    const temsil = okeyinTemsili(per, okeyTasId);
+    if (temsil === null) return false;
+    if (aday.renk !== temsil.renk || aday.sayi !== temsil.sayi) return false;
+  }
+
   const yeni = per.taslar.map((t) => (t.id === okeyTasId ? aday : t));
   return perDogrula(per.tip, yeni).ok;
 }
 
-/** KURALLAR.md §6 — isleme: yerdeki bir pere tas eklemek. Perin tipi korunur. */
+/**
+ * KURALLAR.md §6 — isleme: yerdeki bir pere tas eklemek. Perin tipi korunur.
+ *
+ * §9 0.8 — yerdeki taslarin yeri de korunur: seriye eklenen tas, perde duran
+ * okeyi baska bir sayiya kaydiramaz. Kayan bir okey, yere inmis peri yeniden
+ * dizmek demektir; oradaki taslar artik oyuncunun degil masanindir.
+ */
 export function pereIsle(per: Per, ekTaslar: readonly Tas[]): PerSonucu {
-  return perDogrula(per.tip, [...per.taslar, ...ekTaslar]);
+  const sonuc = perDogrula(per.tip, [...per.taslar, ...ekTaslar]);
+  if (!sonuc.ok) return sonuc;
+
+  if (per.tip === 'seri' && !okeylerYerindeKaliyorMu(per.taslar, sonuc.per.taslar)) {
+    return hata('yerdeki-okey-kimildatilamaz');
+  }
+  return sonuc;
 }
 
 /** Bir perdeki okey taslarinin kimlikleri. */
@@ -341,41 +472,20 @@ export function perdekiOkeyler(per: Per): readonly TasId[] {
  * 10-11-12 hem 11-12-13 olabilir) en yuksek gecerli baslangic secilir:
  * okey mumkun oldugunca saga, oyuncunun beklediği yere duser.
  *
+ * Hesap `seriYerlesimi`nin: okeyin ekranda gorundugu yer, motorun §6/§9 0.8
+ * icin okudugu yerin ta kendisi. Ayri hesaplansaydi ikisi ayrisabilirdi.
+ *
  * Kut ve ciftte sira bir sey ifade etmedigi icin dizi oldugu gibi doner.
  */
 export function perGoruntuSirasi(per: Per): readonly Tas[] {
   if (per.tip !== 'seri') return per.taslar;
-  if (!seriMu(per.taslar).ok) return per.taslar;
 
-  const normaller = per.taslar.filter(normalMi);
-  const okeyler = per.taslar.filter(okeyMi);
-  if (normaller.length === 0) return per.taslar;
+  const yerlesim = seriYerlesimi(per.taslar);
+  if (yerlesim === null) return per.taslar;
 
-  const uzunluk = per.taslar.length;
-  const sayilar = normaller.map((tas) => tas.sayi);
-  const enKucuk = Math.min(...sayilar);
-  const enBuyuk = Math.max(...sayilar);
-
-  // seriMu ile ayni pencere hesabi; gecerlilik orada dogrulandi.
-  const altSinir = Math.max(1, enBuyuk - uzunluk + 1);
-  const ustSinir = Math.min(enKucuk, SAYILAR.length - uzunluk + 1);
-  if (altSinir > ustSinir) return per.taslar;
-
-  const baslangic = ustSinir;
-  const sayiyaGore = new Map(normaller.map((tas) => [tas.sayi as number, tas]));
-  const sirali: Tas[] = [];
-  let sonrakiOkey = 0;
-  for (let sayi = baslangic; sayi < baslangic + uzunluk; sayi++) {
-    const normal = sayiyaGore.get(sayi);
-    if (normal !== undefined) {
-      sirali.push(normal);
-      continue;
-    }
-    const okey = okeyler[sonrakiOkey++];
-    if (okey === undefined) return per.taslar;
-    sirali.push(okey);
-  }
-  return sirali;
+  return [...per.taslar].sort(
+    (a, b) => (yerlesim.get(a.id) ?? 0) - (yerlesim.get(b.id) ?? 0),
+  );
 }
 
 /** Kutte kullanilmamis renkler — istemci ipucu icin; kural karari degildir. */

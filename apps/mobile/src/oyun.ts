@@ -1,23 +1,15 @@
-// Cevrimdisi oyun surucusu — UYGULAMADA KULLANILMIYOR.
+// Cevrimdisi oyun surucusu — lobideki ALISTIRMA bunu kullanir
+// (src/Uygulama.tsx'teki `AlistirmaMasasi`).
 //
 // Asil oyun sunucuda kosuyor (src/ag/cevrimiciOyun.ts). Bu dosya ayni isi
 // cihazda yapiyor: tam durumu tutuyor, aksiyonlari `reduce`'a veriyor,
 // zamani (`Date.now`) disaridan besliyor. Motor saf kaliyor. Diger uc
 // oyuncuyu `bot.ts` oynatiyor.
 //
-// LOBIDE GIRISI YOK — bilerek. Oyun cevrimici oynanmak uzere kuruldu.
-//
-// Yine de silinmedi: sunucu ayakta olmadan ekrani calistirmanin tek yolu bu,
-// ve `MasaSurucusu` sozlesmesinin ikinci uygulamasi olarak arayuzun gercekten
-// surucuden bagimsiz kaldigini kanitliyor.
-//
-// Acmak icin src/Uygulama.tsx'te iki satir yeter:
-//
-//     const yerel = useOyun(1);
-//     return <Masa surucu={yerel} onMasadanCik={...} />;
-//
-// (Alistirma modu ya da magaza incelemesi icin bir giris gerekirse baslangic
-// noktasi burasi.)
+// Iki isi birden goruyor: sunucu ayakta olmadan oynanabilen tek yol bu
+// (magaza denetcisi de dahil — CLAUDE.md), ve `MasaSurucusu` sozlesmesinin
+// ikinci uygulamasi olarak arayuzun gercekten surucuden bagimsiz kaldigini
+// kanitliyor.
 //
 // Ekran ve yer tutucu oyuncular durumu DOGRUDAN okumuyor; herkes kendi
 // `viewFor` projeksiyonunu goruyor (CLAUDE.md motor kurali #3).
@@ -51,10 +43,17 @@ import {
 
 export const INSAN: OyuncuId = 0;
 
-function tohumUret(tur: TurNo, elSayaci: number): number {
-  // Tohum motorun disindan gelir (CLAUDE.md #2). Tur ve el sayacini
-  // karistirarak her el farkli, ama ayni girdiyle her zaman ayni olsun.
-  return (tur * 7919 + elSayaci * 104729 + 15485863) | 0;
+function tohumUret(): number {
+  // Tohum motorun DISINDAN gelir (CLAUDE.md #2): rastgelelik motorda yasak,
+  // burada serbest. Motorun belirlenimliligi bozulmuyor — ayni tohum yine
+  // ayni eli kuruyor, degisen tek sey tohumun nereden geldigi.
+  //
+  // Eskiden tohum (tur, elSayaci)'nin saf bir fonksiyonuydu. Belirlenimli
+  // olmasi test icin iyiydi ama oyun icin hataydi: her yeni alistirma masasi
+  // 1. tura ayni sayaçla basladigi icin dagitim, cekilen taslarin sirasi ve
+  // dolayisiyla yer tutucularin oynayisi her seferinde birebir ayniydi.
+  // Sunucu ayni isi ayni sekilde yapiyor (servisler/oyunServisi.ts).
+  return (Math.floor(Math.random() * 0xffffffff) | 0) >>> 0;
 }
 
 /** Yerel surucu — `MasaSurucusu` sozlesmesine ek olarak birkac ayrinti. */
@@ -83,11 +82,10 @@ const TUR_ARASI_SN = 5;
 
 export function useOyun(baslangicTuru: TurNo = 1): OyunArayuzu {
   const [durum, setDurum] = useState<OyunDurumu>(() =>
-    elBaslat({ tur: baslangicTuru, baslayan: INSAN, tohum: tohumUret(baslangicTuru, 0) }),
+    elBaslat({ tur: baslangicTuru, baslayan: INSAN, tohum: tohumUret() }),
   );
   const [sonHata, setSonHata] = useState<HataKodu | null>(null);
   const baslayanRef = useRef<OyuncuId>(INSAN);
-  const elSayaciRef = useRef(0);
   // Yeni el, sira degismeden de baslayabilir (insan basliyorsa). Sure sayaci
   // bu sayacla eli ayirt ediyor.
   const [elNo, setElNo] = useState(0);
@@ -137,20 +135,16 @@ export function useOyun(baslangicTuru: TurNo = 1): OyunArayuzu {
   }, []);
 
   const yeniEl = useCallback((tur: TurNo) => {
-    elSayaciRef.current += 1;
     yeniElHazirla();
-    setDurum(
-      elBaslat({ tur, baslayan: baslayanRef.current, tohum: tohumUret(tur, elSayaciRef.current) }),
-    );
+    setDurum(elBaslat({ tur, baslayan: baslayanRef.current, tohum: tohumUret() }));
   }, [yeniElHazirla]);
 
   const sonrakiTur = useCallback(() => {
     baslayanRef.current = sonrakiBaslayan(baslayanRef.current);
     setDurum((mevcut) => {
       const tur = (mevcut.tur < 16 ? mevcut.tur + 1 : 1) as TurNo;
-      elSayaciRef.current += 1;
       yeniElHazirla();
-      return elBaslat({ tur, baslayan: baslayanRef.current, tohum: tohumUret(tur, elSayaciRef.current) });
+      return elBaslat({ tur, baslayan: baslayanRef.current, tohum: tohumUret() });
     });
   }, [yeniElHazirla]);
 

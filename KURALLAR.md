@@ -427,11 +427,14 @@ Yerdeki bir perde duran okeyin temsil ettiği gerçek taş elindeyse, o taş
 masaya konabilecek bir taştır (§6 — okey çekme). Atmak, §8'in tarif ettiği
 "masaya dikkat etmeme" durumudur; ceza işler.
 
-Çoğu durumda bu zaten böyleydi: yerdeki `11 + okey + 13` serisine `12`
-**doğrudan eklenebiliyor** (okey 10'a kayar, 10-11-12-13 olur), yani `12`
-eskiden de işler taştı. Karar tek bir boşluğu kapatıyor: **dörtlü kütteki
-okey.** `kirmizi3 + siyah3 + mavi3 + okey` kütüne beşinci taş eklenemez, ama
-`sari3` okeyin yerine geçip okeyi çekebilir — artık o da işler sayılıyor.
+Karar tek bir boşluğu kapatıyor: **dörtlü kütteki okey.**
+`kirmizi3 + siyah3 + mavi3 + okey` kütüne beşinci taş eklenemez, ama `sari3`
+okeyin yerine geçip okeyi çekebilir — artık o da işler sayılıyor.
+
+> **0.8 ile düzeltildi.** Bu madde önce şöyle örneklendirilmişti: "yerdeki
+> `11 + okey + 13` serisine `12` doğrudan eklenebiliyor (okey 10'a kayar,
+> 10-11-12-13 olur)". Okeyin kayması 0.8 ile yasaklandı. `12` yine işler
+> taştır — ama artık **okeyi çekerek** (§6), okeyi yerinden oynatarak değil.
 
 Kütte okeyi çekmek birden fazla taş gerektirebildiği için (§6 — dört renk
 tamamlanmalı) taşın **gereken taşlardan biri** olması aranır; eksik renklerin
@@ -451,6 +454,32 @@ Gerekçe: kademe, o eldeki oyalanmayı caydırmak için var. 16 tur boyunca
 taşınması, tek bir dalgınlığı maç boyu süren bir cezaya çeviriyordu.
 El içindeki davranış değişmedi — dolduran her süre bir alt basamağa iner,
 en alt basamakta kalır.
+
+### 0.8 ile eklenenler (6 Eylül 2026)
+
+| Konu | Karar | Nerede |
+|---|---|---|
+| Yerdeki okeyin yeri | **Kımıldamaz** — bir kez indiği sayıda kalır | §6, §8 |
+
+Yere inmiş bir per artık oyuncunun değil masanındır: **taşların yeri
+değişmez.** Bu, seride duran okeyi de kapsar — okey hangi taşın yerine
+indiyse orada kalır.
+
+- Yerdeki `siyah4 + siyah5 + siyah6 + okey` serisinde okey **siyah7**'dir
+- `siyah3` ve `siyah8` işlenebilir; ikisi de okeye dokunmaz
+- `siyah2` **işlenemez**: okeyi 3'e kaydırıp seriyi 2-3-4-5-6 yapardı
+- `siyah7` işlenemez ama **okeyi çeker** (§6) — okeyin yerine geçen taş odur
+
+Okeyin hangi sayıyı temsil ettiği belirsizse (`11 + 12 + okey` hem 10-11-12
+hem 11-12-13 olabilir) okey **mümkün olduğunca sağa** düşer: 11-12-**13**.
+Bu zaten perin ekranda gösterildiği düzendi; artık motor da aynı yeri okuyor.
+
+Gerekçe: kayan okey, yere inmiş peri yeniden dizmek demek. Bir oyuncunun
+açtığı `4-5-6-okey(7)` serisinin, başkası `siyah2` işlediği için sessizce
+`2-3-4-5-6`ya dönüşmesi oyunun kabul ettiği bir hamle değil.
+
+Kütte durum farklı ve **değişmedi**: kütteki okeyin rengi belirsiz olabildiği
+için (§6 — dört rengi tamamlama şartı) orada sabitlenecek bir "yer" yok.
 
 Motor bu kararlara göre yazıldı; her biri için en az bir test var.
 

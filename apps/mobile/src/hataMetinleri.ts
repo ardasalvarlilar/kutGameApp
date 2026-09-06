@@ -30,6 +30,7 @@ export const HATA_METINLERI: Partial<Record<HataKodu, string>> = {
   'seri-farkli-renk': 'Seri tek renk olmalı',
   'seri-sayi-tekrari': 'Seride aynı sayı iki kez olamaz',
   'cift-birebir-es-degil': 'Çift birebir aynı taştan olur',
+  'yerdeki-okey-kimildatilamaz': 'Yerdeki okeyin yeri değişemez',
   'cift-iki-tas-olmali': 'Çift tam olarak iki taştır',
   'per-degil': 'Bu taşlar geçerli bir per değil',
   'tur-16-acma-yok': 'Tur 16’da yere per inmez',
