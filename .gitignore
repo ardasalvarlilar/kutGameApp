@@ -22,3 +22,13 @@ graphify-out/
 
 # Test kapsam raporu (vitest --coverage calistirilirsa)
 coverage/
+
+# npm/yarn kilit dosyalari — bu depo pnpm kullaniyor (bkz. CLAUDE.md).
+#
+# Bunlar bir kolaylik degil, TUZAK: kokte bir package-lock.json durursa EAS
+# Build projeyi "npm workspace" sanip `npm ci` calistiriyor. npm, pnpm'in
+# `workspace:*` protokolunu cozemedigi icin kurulum bos geciyor ve derleme
+# "Failed to resolve plugin for module expo-audio" ile daha app config
+# okunurken duruyor. Iki uretim derlemesi tam bu yuzden yandi.
+package-lock.json
+yarn.lock

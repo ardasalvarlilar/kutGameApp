@@ -36,6 +36,13 @@ docker-compose.yml  # traefik + mongo + sunucu
 
 `pnpm` global olarak kurulu değil; Node ile gelen `corepack` üzerinden çalışır.
 
+**Depoda `package-lock.json` ya da `yarn.lock` bulunmamalı.** Bu bir üslup
+tercihi değil: kökte bir `package-lock.json` durursa EAS Build projeyi "npm
+workspace" sanıp `npm ci` çalıştırıyor, npm de pnpm'in `workspace:*`
+protokolünü çözemediği için kurulum boş geçiyor. Derleme, daha app config
+okunurken `Failed to resolve plugin for module "expo-audio"` ile duruyor —
+hata mesajı eklentiyi suçladığı için yanıltıcı. İkisi de `.gitignore`'da.
+
 ```
 pnpm install                        # bağımlılıklar
 pnpm -r test                        # tüm testler
