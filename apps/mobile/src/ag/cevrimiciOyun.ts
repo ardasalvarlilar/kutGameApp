@@ -25,6 +25,7 @@ import { hataMetni } from '../hataMetinleri';
 import type { MasaSurucusu } from '../surucu';
 import { sor, type Socket } from './soket';
 import type {
+  AcikMasaOzeti,
   ElSonuVerisi,
   GorunumVerisi,
   HataVerisi,
@@ -46,6 +47,8 @@ export interface CevrimiciMasa {
   readonly masaKur: (ozel?: boolean) => Promise<void>;
   readonly masayaKatil: (kod: string) => Promise<void>;
   readonly hizliOyna: () => Promise<void>;
+  /** MASA BUL: oturulabilecek acik masalar. Masaya OTURTMAZ, yalnizca listeler. */
+  readonly acikMasalar: () => Promise<readonly AcikMasaOzeti[]>;
   readonly hazirOl: (hazir: boolean) => Promise<void>;
   readonly masadanCik: () => Promise<void>;
 }
@@ -206,6 +209,22 @@ export function useCevrimiciMasa(soket: Socket | null, bagli: boolean): Cevrimic
     [istek],
   );
   const hizliOyna = useCallback(async (): Promise<void> => istek('masa:hizli'), [istek]);
+
+  // MASA BUL, `istek`ten GECMIYOR: o, donen `masa` alanini masaya oturmus
+  // saymak icin var. Listeye bakmak masaya oturmak degil — oyuncu hala lobide.
+  const acikMasalar = useCallback(async (): Promise<readonly AcikMasaOzeti[]> => {
+    if (soket === null) {
+      setHata('Sunucuya bağlı değilsin');
+      return [];
+    }
+    const sonuc = await sor<{ masalar: readonly AcikMasaOzeti[] }>(soket, 'masa:liste');
+    if (!sonuc.ok) {
+      setHata(sonuc.hata);
+      return [];
+    }
+    setHata(null);
+    return sonuc.veri.masalar;
+  }, [soket]);
   const hazirOl = useCallback(
     async (hazir: boolean): Promise<void> => istek('masa:hazir', { hazir }),
     [istek],
@@ -276,6 +295,7 @@ export function useCevrimiciMasa(soket: Socket | null, bagli: boolean): Cevrimic
     masaKur,
     masayaKatil,
     hizliOyna,
+    acikMasalar,
     hazirOl,
     masadanCik,
   };

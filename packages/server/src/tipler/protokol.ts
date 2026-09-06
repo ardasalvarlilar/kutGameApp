@@ -30,6 +30,22 @@ export interface MasaGorunumu {
   readonly puanlar: Readonly<Record<number, number>>;
 }
 
+/**
+ * MASA BUL listesindeki bir satir.
+ *
+ * `masaId` bilerek YOK: listeye katilim da kodla oluyor, ayri bir kimlik
+ * sizdirmanin faydasi yok. Ozel masalar bu listeye hic girmiyor.
+ */
+export interface AcikMasaOzeti {
+  readonly kod: string;
+  readonly oyuncuSayisi: number;
+  readonly kapasite: number;
+  /** Oturanlarin adlari, koltuk sirasiyla. */
+  readonly oyuncular: readonly string[];
+  /** Bu masada zaten oturuyor muyum? Ekran "geri dön" diyebilsin. */
+  readonly benimMi: boolean;
+}
+
 /** Sunucunun sira sayacini istemciye bildirmesi. */
 export interface SureGorunumu {
   readonly siradaki: OyuncuId;
@@ -64,6 +80,11 @@ export interface IstemciOlaylari {
   'masa:hizli': (
     girdi: Record<string, never>,
     yanit: (sonuc: Yanit<{ masa: MasaGorunumu }>) => void,
+  ) => void;
+  /** MASA BUL: oturulabilecek acik masalar. Ozel masalar donmez. */
+  'masa:liste': (
+    girdi: Record<string, never>,
+    yanit: (sonuc: Yanit<{ masalar: readonly AcikMasaOzeti[] }>) => void,
   ) => void;
   'masa:cik': (girdi: Record<string, never>, yanit: (sonuc: Yanit<null>) => void) => void;
   'masa:hazir': (

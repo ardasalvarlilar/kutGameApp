@@ -17,6 +17,7 @@ import { Bekleme } from './bilesenler/Bekleme';
 import { Giris } from './bilesenler/Giris';
 import { Hesap } from './bilesenler/Hesap';
 import { Lobi } from './bilesenler/Lobi';
+import { MasaBul } from './bilesenler/MasaBul';
 import type { MasadakiOyuncu } from './bilesenler/Ayarlar';
 import { Masa } from './Masa';
 import { useCevrimiciMasa } from './ag/cevrimiciOyun';
@@ -26,7 +27,7 @@ import type { SikayetSebebi } from './ag/api';
 import { renkler } from './tema';
 
 /** Lobiden acilan yan ekranlar. */
-type YanEkran = 'yok' | 'hesap' | 'alistirma';
+type YanEkran = 'yok' | 'hesap' | 'alistirma' | 'masaBul';
 
 function Perde({ yazi }: { readonly yazi: string }) {
   return (
@@ -170,6 +171,24 @@ export function Uygulama() {
     );
   }
 
+  // MASA BUL. Oturmayi basarirsa `oda.masa` dolar ve yukaridaki dallardan biri
+  // devralir; bu yuzden ekrani ayrica kapatmaya gerek yok.
+  if (yanEkran === 'masaBul') {
+    return (
+      <SafeAreaView style={stil.ekran}>
+        <StatusBar hidden />
+        <MasaBul
+          masalariGetir={oda.acikMasalar}
+          onKatil={(kod) => void oda.masayaKatil(kod)}
+          onMasaAc={() => void oda.masaKur(false)}
+          onKapat={() => setYanEkran('yok')}
+          mesgul={oda.mesgul}
+          hata={oda.hata}
+        />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={stil.ekran}>
       <StatusBar hidden />
@@ -179,6 +198,7 @@ export function Uygulama() {
         mesgul={oda.mesgul}
         hata={oda.hata}
         onHizli={() => void oda.hizliOyna()}
+        onMasaBul={() => setYanEkran('masaBul')}
         onMasaAc={() => void oda.masaKur(true)}
         onKatil={(kod) => void oda.masayaKatil(kod)}
         onAlistirma={() => setYanEkran('alistirma')}

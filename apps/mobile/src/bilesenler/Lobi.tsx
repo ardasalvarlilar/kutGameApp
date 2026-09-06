@@ -1,9 +1,14 @@
-// Lobi — masaya oturmanin dort yolu.
+// Lobi — masaya oturmanin bes yolu.
 //
-//   HIZLI OYNA   — kod bilmeden, acik bir masaya oturur (dolunca baslar)
-//   MASA AÇ      — dort haneli kod uretir, arkadaslara soylenir
-//   KODLA KATIL  — arkadasin kodunu yaz, koltuguna otur
+//   HIZLI OYNA   — secmeden, en dolu acik masaya oturur (dolunca baslar)
+//   MASA BUL     — acik masalari listeler, oyuncu kendi secer
+//   ÖZEL MASA    — dort haneli kod uretir; listede GORUNMEZ, yalnizca kodla
+//   KODLA KATIL  — arkadasinin ozel masa kodunu yaz, koltuguna otur
 //   ALIŞTIRMA    — cevrimdisi, uc yer tutucu oyuncuyla, bu cihazda
+//
+// Acik/ozel ayrimi: yabanciyla oynamaya acik olan MASA BUL'a bakar, yalnizca
+// arkadaslariyla oynayacak olan ozel masa acip kodu paylasir. Ozel masaya
+// kodu bilmeyen hicbir yoldan giremez — listede hic gorunmuyor.
 //
 // Kod, ayni Wi-Fi kesfi yerine bilerek secildi (MIMARI.md §5): ayni odada da
 // farkli sehirde de ayni sekilde calisir, hicbir ag iznine ihtiyac duymaz.
@@ -26,6 +31,7 @@ export interface LobiOzellikleri {
   readonly mesgul: boolean;
   readonly hata: string | null;
   readonly onHizli: () => void;
+  readonly onMasaBul: () => void;
   readonly onMasaAc: () => void;
   readonly onKatil: (kod: string) => void;
   readonly onAlistirma: () => void;
@@ -38,6 +44,7 @@ export function Lobi({
   mesgul,
   hata,
   onHizli,
+  onMasaBul,
   onMasaAc,
   onKatil,
   onAlistirma,
@@ -77,10 +84,13 @@ export function Lobi({
 
       <ScrollView contentContainerStyle={stil.sag} keyboardShouldPersistTaps="handled">
         <AnaDugme etiket="HIZLI OYNA" onBas={onHizli} aktif={bagli && !mesgul} />
-        <Text style={stil.aciklama}>Açık bir masaya otur, dört kişi olunca başlar</Text>
+        <Text style={stil.aciklama}>Seni uygun bir masaya oturtur, dört kişi olunca başlar</Text>
 
-        <AnaDugme etiket="MASA AÇ" onBas={onMasaAc} aktif={bagli && !mesgul} tur="sade" />
-        <Text style={stil.aciklama}>Kod üret, arkadaşlarına söyle</Text>
+        <AnaDugme etiket="MASA BUL" onBas={onMasaBul} aktif={bagli && !mesgul} tur="sade" />
+        <Text style={stil.aciklama}>Açık masaları gör, istediğine otur</Text>
+
+        <AnaDugme etiket="ÖZEL MASA" onBas={onMasaAc} aktif={bagli && !mesgul} tur="sade" />
+        <Text style={stil.aciklama}>Kod üret; yalnızca kodu bilenler girebilir</Text>
 
         <View style={stil.katilKutu}>
           <Alan

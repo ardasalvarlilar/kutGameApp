@@ -54,6 +54,16 @@ const sema = z.object({
   SMTP_SIFRE: z.string().optional(),
   /** Gonderen adresi; bos ise SMTP_KULLANICI kullanilir. */
   SMTP_GONDEREN: z.string().optional(),
+
+  // --- Push bildirimleri -----------------------------------------------------
+  // Expo Push Service kullaniliyor: uygulama zaten EAS ile derleniyor ve EAS
+  // APNs/FCM kimlik bilgilerini kendisi yonetiyor. Dogrudan APNs'e gitmek
+  // sertifika tasimak ve iki ayri saglayici (iOS + Android) kodlamak demekti.
+  //
+  // Erisim jetonu ISTEGE BAGLI: yalnizca Expo hesabinda "enhanced security"
+  // acikken sart. Bos birakilirsa bildirimler yine gider.
+  EXPO_PUSH_URL: z.string().default('https://exp.host/--/api/v2/push/send'),
+  EXPO_ERISIM_JETONU: z.string().optional(),
 });
 
 const sonuc = sema.safeParse(process.env);
@@ -96,6 +106,15 @@ export const config = {
     gonderen: ham.SMTP_GONDEREN ?? ham.SMTP_KULLANICI ?? '',
   },
 
+  bildirim: {
+    url: ham.EXPO_PUSH_URL,
+    erisimJetonu: ham.EXPO_ERISIM_JETONU ?? '',
+    /** Expo tek istekte en fazla 100 ileti aliyor; fazlasi parcalara bolunur. */
+    yiginBoyutu: 100,
+    /** Bir oyuncunun kac cihazi olabilir. Eskiyenler bastan atilir. */
+    enFazlaCihaz: 10,
+  },
+
   // --- Oyun ayarlari ---------------------------------------------------------
   // Motorun `KuralAyarlari`ndan AYRI: bunlar odanin isleyisiyle ilgili,
   // kuralla degil. Kural ayarlari KURALLAR.md'den gelir ve motordadir.
@@ -106,6 +125,8 @@ export const config = {
     bosMasaOmruMs: 10 * 60 * 1000,
     /** Kopan oyuncu bu kadar sure koltugunu korur (ms). */
     yenidenBaglanmaSuresiMs: 2 * 60 * 1000,
+    /** MASA BUL ekraninda en fazla kac masa listelenir. */
+    listeSiniri: 30,
   },
 
   // --- Parola sifirlama ------------------------------------------------------

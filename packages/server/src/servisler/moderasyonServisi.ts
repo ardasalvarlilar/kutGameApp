@@ -127,6 +127,28 @@ export async function aralarindaEngelVarMi(
   return sayi > 0;
 }
 
+/**
+ * Bu oyuncuyla arasinda engel olan HERKESIN kimligi — iki yon de dahil.
+ *
+ * `engelliBiriVarMi` tek bir masayi elemek icin yeterli. Masa LISTESINDE ise
+ * masa basina bir sorgu atmak N sorgu demek; bu, hepsini tek sorguda cikarip
+ * elemeyi bellekte yapmayi sagliyor.
+ */
+export async function engelliKimlikler(oyuncuId: string): Promise<ReadonlySet<string>> {
+  if (!Types.ObjectId.isValid(oyuncuId)) return new Set();
+  const ben = kimlik(oyuncuId);
+
+  const [benimki, beniEngelleyenler] = await Promise.all([
+    Oyuncu.findById(ben).select('engellenenler').lean(),
+    Oyuncu.find({ engellenenler: ben }).select('_id').lean(),
+  ]);
+
+  const kume = new Set<string>();
+  for (const id of benimki?.engellenenler ?? []) kume.add(String(id));
+  for (const oyuncu of beniEngelleyenler) kume.add(String(oyuncu._id));
+  return kume;
+}
+
 /** Verilen oyuncularin herhangi biriyle engel iliskisi var mi? */
 export async function engelliBiriVarMi(
   oyuncuId: string,

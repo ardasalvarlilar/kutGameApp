@@ -33,6 +33,15 @@ export interface MasaGorunumu {
   readonly puanlar: Readonly<Record<number, number>>;
 }
 
+/** MASA BUL listesindeki bir satir. Ozel masalar bu listeye girmez. */
+export interface AcikMasaOzeti {
+  readonly kod: string;
+  readonly oyuncuSayisi: number;
+  readonly kapasite: number;
+  readonly oyuncular: readonly string[];
+  readonly benimMi: boolean;
+}
+
 export interface SureGorunumu {
   readonly siradaki: OyuncuId;
   readonly bitisZamani: number;

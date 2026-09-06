@@ -10,8 +10,8 @@ import { Types } from 'mongoose';
 import { config } from '../config.js';
 import { Masa, type MasaBelgesi } from '../modeller/Masa.js';
 import { Oyuncu } from '../modeller/Oyuncu.js';
-import { engelliBiriVarMi } from './moderasyonServisi.js';
-import type { KoltukGorunumu, MasaGorunumu } from '../tipler/protokol.js';
+import { engelliBiriVarMi, engelliKimlikler } from './moderasyonServisi.js';
+import type { AcikMasaOzeti, KoltukGorunumu, MasaGorunumu } from '../tipler/protokol.js';
 import type { OyuncuId } from '@kut/engine';
 
 /** Karisabilecek harfler yok: 0/O, 1/I/L cikarildi — kod sesli soyleniyor. */
@@ -96,6 +96,52 @@ export async function acikMasam(oyuncuId: string) {
     'koltuklar.oyuncu': new Types.ObjectId(oyuncuId),
     durum: { $ne: 'bitti' },
   });
+}
+
+/**
+ * MASA BUL — kod bilmeden oturulabilecek ACIK masalar.
+ *
+ * Ozel masalar bu listeye GIRMEZ; onlarin tek kapisi koddur. Ayrim veri
+ * modelinde zaten vardi (`Masa.ozel`), eksik olan onu gosteren bu uctu.
+ *
+ * Siralama `hizliMasa` ile ayni: en dolu masa once. Oyuncular tek masada
+ * toplansin — az oyuncu varken bu, oyunun hic baslamamasiyla baslamasi
+ * arasindaki fark oluyor.
+ *
+ * Engel elemesi burada da yapiliyor (App Store 1.2): engellediginin ya da
+ * seni engelleyenin oturdugu masa listede hic gorunmez. Gorunup katilirken
+ * reddedilmesi, engellemeyi karsi tarafa sezdirirdi.
+ */
+export async function acikMasalar(oyuncuId: string): Promise<readonly AcikMasaOzeti[]> {
+  const masalar = await Masa.find({ durum: 'bekliyor', ozel: false })
+    .sort({ createdAt: 1 })
+    .limit(config.oda.listeSiniri);
+
+  const engelliler = await engelliKimlikler(oyuncuId);
+
+  const uygun = masalar.filter(
+    (masa) =>
+      masa.koltuklar.length < MASA_KAPASITESI &&
+      !masa.koltuklar.some((koltuk) => engelliler.has(String(koltuk.oyuncu))),
+  );
+
+  // Adlari tek sorguda al: masa basina sorgu atmak N+1 olurdu.
+  const kimlikler = uygun.flatMap((masa) => masa.koltuklar.map((koltuk) => koltuk.oyuncu));
+  const oyuncular = await Oyuncu.find({ _id: { $in: kimlikler } }).select('ad').lean();
+  const adlar = new Map(oyuncular.map((o) => [String(o._id), o.ad]));
+
+  return uygun
+    .map((masa) => ({
+      kod: masa.kod,
+      oyuncuSayisi: masa.koltuklar.length,
+      kapasite: MASA_KAPASITESI,
+      oyuncular: masa.koltuklar
+        .slice()
+        .sort((a, b) => a.no - b.no)
+        .map((koltuk) => adlar.get(String(koltuk.oyuncu)) ?? 'Oyuncu'),
+      benimMi: masa.koltuklar.some((koltuk) => String(koltuk.oyuncu) === oyuncuId),
+    }))
+    .sort((a, b) => b.oyuncuSayisi - a.oyuncuSayisi);
 }
 
 export async function masaKur(oyuncuId: string, ozel = true) {

@@ -27,6 +27,7 @@ import { jetonuCoz } from '../servisler/kimlikServisi.js';
 import { elIsle, macIsle } from '../servisler/ilerlemeServisi.js';
 import {
   MasaHatasi,
+  acikMasalar,
   acikMasam,
   baslayabilirMi,
   hazirDurumu,
@@ -366,6 +367,15 @@ export function soketiKur(io: Server): void {
         oyunuGeriVer(masaId);
         await masayiYay(io, masaId);
         await gerekirseBaslat(io, masaId);
+      } catch (hata) {
+        yanit(basarisiz(hataMesaji(hata)));
+      }
+    });
+
+    // MASA BUL — oturmadan once bakmak icin. Odaya girmez, durum degistirmez.
+    soket.on('masa:liste', async (_girdi: unknown, yanit: (s: Yanit<unknown>) => void) => {
+      try {
+        yanit(basarili({ masalar: await acikMasalar(kimlik) }));
       } catch (hata) {
         yanit(basarisiz(hataMesaji(hata)));
       }
