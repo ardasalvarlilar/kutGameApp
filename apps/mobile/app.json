@@ -41,6 +41,13 @@
           "resizeMode": "cover",
           "backgroundColor": "#0b2739"
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#f2c14e"
+        }
       ]
     ],
     "primaryColor": "#f2c14e",

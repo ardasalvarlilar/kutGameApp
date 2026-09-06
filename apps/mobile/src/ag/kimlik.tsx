@@ -21,6 +21,7 @@ import {
   type ReactNode,
 } from 'react';
 import * as api from './api';
+import { cihaziDusur, cihaziKaydet } from './bildirim';
 import { cihazKimligi, jetonuOku, jetonuSil, jetonuYaz } from './depo';
 import { soketiAc, soketiKapat, type Socket } from './soket';
 import type { GirisVerisi, OyuncuOzeti } from './protokol';
@@ -124,6 +125,23 @@ export function KimlikSaglayici({ children }: { readonly children: ReactNode }) 
     };
   }, []);
 
+  // Oturum acilinca cihazi bildirimlere kaydet.
+  //
+  // Burada duruyor cunku bildirim jetonu bir OYUNCUYA baglaniyor: hem
+  // acilistaki jeton dogrulamasi hem misafir/giris/kayit yollari buradan
+  // gecip `durum`u 'hazir' yapiyor, yani tek bir yer dordunu birden
+  // kapsiyor.
+  //
+  // `void`: sonucu beklemiyoruz ve hatasi yutuluyor. Bildirim izni oyunun
+  // calismasi icin sart degil (App Store 4.5.4) — reddedilse de uygulama
+  // hicbir sey olmamis gibi devam etmeli.
+  useEffect(() => {
+    if (durum !== 'hazir') return;
+    const jeton = jetonRef.current;
+    if (jeton === null) return;
+    void cihaziKaydet(jeton);
+  }, [durum]);
+
   // Baglanti durumunu izle — ekranlar "bağlantı yok" diyebilsin.
   useEffect(() => {
     if (soket === null) return;
@@ -171,6 +189,12 @@ export function KimlikSaglayici({ children }: { readonly children: ReactNode }) 
   );
 
   const cikisYap = useCallback(async (): Promise<void> => {
+    // Once cihazi bildirimlerden dusur, SONRA jetonu sil: silinmis jetonla
+    // sunucuya ulasilamaz. Olmazsa bu telefon, cikis yapan oyuncunun
+    // bildirimlerini almaya devam ederdi.
+    const oturumJetonu = jetonRef.current;
+    if (oturumJetonu !== null) await cihaziDusur(oturumJetonu);
+
     soketiKapat();
     await jetonuSil();
     jetonRef.current = null;

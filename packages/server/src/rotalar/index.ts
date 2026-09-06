@@ -20,6 +20,10 @@ import {
   sikayet,
   yukselt,
 } from '../denetleyiciler/kimlikDenetleyicisi.js';
+import {
+  bildirimJetonuKaydet,
+  bildirimJetonuSil,
+} from '../denetleyiciler/bildirimDenetleyicisi.js';
 import { kimlikDogrula } from '../araKatman/kimlikDogrula.js';
 import { oranSiniri } from '../araKatman/oranSiniri.js';
 
@@ -64,6 +68,12 @@ export function rotalariKur(): Router {
 
   // App Store 5.1.1(v) — hesap uygulama ICINDEN silinebilmeli.
   rota.delete('/kimlik/hesap', kimlikDogrula, genelSinir, sar(hesapSil));
+
+  // Push bildirimi — cihaz kaydi. Uygulama izni alinca jetonu yolluyor,
+  // cikis yaparken siliyor. Ne zaman bildirim gonderilecegi ayri bir konu
+  // (servisler/bildirimServisi.ts).
+  rota.post('/bildirim/jeton', kimlikDogrula, genelSinir, sar(bildirimJetonuKaydet));
+  rota.delete('/bildirim/jeton', kimlikDogrula, genelSinir, sar(bildirimJetonuSil));
 
   // App Store 1.2 — sikayet ve engelleme.
   rota.post('/moderasyon/sikayet', kimlikDogrula, genelSinir, sar(sikayet));

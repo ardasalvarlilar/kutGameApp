@@ -68,6 +68,27 @@ const parolaSifirlamaSemasi = new Schema(
   { _id: false },
 );
 
+// Push bildirimi jetonu.
+//
+// Jeton CIHAZI temsil eder, hesabi degil: ayni telefondan baska bir hesaba
+// girilirse jeton o hesaba TASINMALI, kopyalanmamali. Kopyalansaydi bildirim
+// eski sahibinin adina o telefona dusmeye devam ederdi — baskasinin oyun
+// bilgisi yabancinin kilit ekraninda gorunurdu. Tasimayi `jetonKaydet`
+// yapiyor (bkz. servisler/bildirimServisi.ts).
+export const BILDIRIM_PLATFORMLARI = ['ios', 'android', 'web'] as const;
+export type BildirimPlatformu = (typeof BILDIRIM_PLATFORMLARI)[number];
+
+const bildirimJetonuSemasi = new Schema(
+  {
+    /** Expo'nun verdigi jeton: "ExponentPushToken[...]". */
+    jeton: { type: String, required: true },
+    platform: { type: String, enum: BILDIRIM_PLATFORMLARI, required: true },
+    /** Son kayit/tazeleme ani; en eskiler sinir asilinca atilir. */
+    sonKullanim: { type: Date, required: true, default: Date.now },
+  },
+  { _id: false },
+);
+
 const oyuncuSemasi = new Schema(
   {
     ad: { type: String, required: true, trim: true, minlength: 2, maxlength: 24 },
@@ -101,6 +122,12 @@ const oyuncuSemasi = new Schema(
      * oldugu icin engelleme "bir daha karsima cikmasin" demek.
      */
     engellenenler: { type: [Schema.Types.ObjectId], ref: 'Oyuncu', required: true, default: [] },
+
+    /**
+     * Push bildirimi gonderilecek cihazlar. Bir oyuncunun birden cok cihazi
+     * olabilir (telefon + tablet), bu yuzden dizi.
+     */
+    bildirimJetonlari: { type: [bildirimJetonuSemasi], required: true, default: [] },
 
     /** Kotu davranis icin; true ise masaya oturamaz. */
     engelli: { type: Boolean, required: true, default: false },

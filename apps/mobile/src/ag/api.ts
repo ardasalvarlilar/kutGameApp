@@ -99,6 +99,24 @@ export const parolayiSifirla = (
 export const hesabiSil = (jeton: string): Promise<Yanit<{ silindi: boolean }>> =>
   cagir({ yol: '/kimlik/hesap', yontem: 'DELETE', jeton });
 
+// --- Push bildirimi cihaz kaydi ---------------------------------------------
+//
+// Bildirimin KENDISI sunucudan geliyor; buradan giden yalnizca "bu cihaza
+// ulasabilirsin" bilgisi. Kararlar ag/bildirim.ts'te.
+
+export const bildirimJetonuKaydet = (
+  oturumJetonu: string,
+  jeton: string,
+  platform: 'ios' | 'android' | 'web',
+): Promise<Yanit<{ kaydedildi: boolean }>> =>
+  cagir({ yol: '/bildirim/jeton', govde: { jeton, platform }, jeton: oturumJetonu });
+
+export const bildirimJetonuSil = (
+  oturumJetonu: string,
+  jeton: string,
+): Promise<Yanit<{ silindi: boolean }>> =>
+  cagir({ yol: '/bildirim/jeton', govde: { jeton }, yontem: 'DELETE', jeton: oturumJetonu });
+
 // --- Sikayet ve engelleme (App Store 1.2) -----------------------------------
 
 export const SIKAYET_SEBEPLERI = [
