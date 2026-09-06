@@ -17,10 +17,8 @@
     "android": {
       "package": "com.kut.mobile",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundColor": "#0b2739",
+        "foregroundImage": "./assets/icon.png"
       },
       "predictiveBackGestureEnabled": false,
       "versionCode": 1,
@@ -35,7 +33,15 @@
     "backgroundColor": "#0b2739",
     "plugins": [
       "expo-audio",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "cover",
+          "backgroundColor": "#0b2739"
+        }
+      ]
     ],
     "primaryColor": "#f2c14e",
     "description": "Okey taşlarıyla oynanan 16 turluk Küt oyunu — dört kişi, online.",
