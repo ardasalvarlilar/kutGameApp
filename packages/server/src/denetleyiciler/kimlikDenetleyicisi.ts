@@ -19,8 +19,10 @@ import {
   misafirYukselt,
   oyuncuOzeti,
   parolaKoduIste,
+  parolaDegistirSemasi,
   parolaSifirlaSemasi,
   parolaUnuttumSemasi,
+  parolayiDegistir,
   parolayiSifirla,
   type GirisSonucu,
 } from '../servisler/kimlikServisi.js';
@@ -163,6 +165,21 @@ export async function parolaSifirla(istek: Request, yanit: Response): Promise<vo
     return;
   }
   await calistir(yanit, () => parolayiSifirla(cozum.data));
+}
+
+/**
+ * Oturumu acik oyuncunun parolasini degistirir.
+ *
+ * Mevcut parola ZORUNLU (bkz. kimlikServisi.parolayiDegistir): jeton cihazda
+ * duruyor ve 30 gun gecerli.
+ */
+export async function parolaDegistir(istek: Request, yanit: Response): Promise<void> {
+  const cozum = parolaDegistirSemasi.safeParse(istek.body);
+  if (!cozum.success) {
+    yanit.status(400).json({ ok: false, hata: ilkHata(cozum.error) });
+    return;
+  }
+  await calistir(yanit, () => parolayiDegistir(istek.oyuncuId as string, cozum.data));
 }
 
 // --- Hesap silme -------------------------------------------------------------

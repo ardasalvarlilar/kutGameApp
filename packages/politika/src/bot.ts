@@ -263,17 +263,14 @@ export function islenebilir(
 /**
  * Yerden alinan tas ele yarar mi? Perdeki tas sayisini artiriyorsa evet.
  *
- * Once ALINABILIR mi ona bakiliyor: KURALLAR.md §5'e gore tur 15'te "cifti
- * bende" hakki sirasi gelenin bedelsiz hakkini da geciyor. Bu kontrol
- * olmadan bot alamayacagi tasi istiyor, motor hakli olarak reddediyor ve
- * sira ilerlemiyordu.
+ * §9 0.10'dan once burada bir kontrol daha vardi: tur 15'te "cifti bende"
+ * talebi bekliyorsa bot yerden ALMAMALIYDI, yoksa motor reddediyor ve sira
+ * kilitleniyordu. O talep artik kuyruga girmiyor — geldigi anda tasi aliyor
+ * ve pencereyi kapatiyor, dolayisiyla bot pencere acikken hep alabilir.
  */
 function yerdenAlmaliMi(gorunum: OyuncuGorunumu): boolean {
   const pencere = gorunum.pencere;
   if (pencere === null) return false;
-  if (gorunum.tur === 15 && gorunum.ayarlar.ciftCalmaHakki && pencere.ciftTalebi !== null) {
-    return false;
-  }
 
   const ustTas = gorunum.atikYiginlari[pencere.atan].ustTas;
   if (ustTas === null) return false;

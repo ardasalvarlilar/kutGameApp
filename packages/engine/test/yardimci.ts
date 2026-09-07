@@ -87,6 +87,7 @@ export function durumKur(parametreler: KurulumParametreleri = {}): OyunDurumu {
     calinanSayisi: oyuncuKaydiOlustur((o) => p.calinanSayisi?.[o] ?? 0),
     islerTasSayisi: oyuncuKaydiOlustur((o) => p.islerTasSayisi?.[o] ?? 0),
     pencere: p.pencere ?? null,
+    sonCalan: null,
     sonuc: null,
   };
 }
@@ -96,14 +97,7 @@ export function pencereKur(
   tas: Tas,
   ekler: Partial<TalepPenceresi> = {},
 ): TalepPenceresi {
-  return {
-    atan,
-    tasId: tas.id,
-    acilisZamani: 0,
-    talepler: [],
-    ciftTalebi: null,
-    ...ekler,
-  };
+  return { atan, tasId: tas.id, talepler: [], ...ekler };
 }
 
 export function yerPeri(

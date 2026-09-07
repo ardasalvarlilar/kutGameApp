@@ -41,17 +41,31 @@ export interface YerPeri {
   readonly taslar: readonly Tas[];
 }
 
-/** KURALLAR.md §5 — tas atildiktan sonra acilan talep penceresi. */
+/**
+ * KURALLAR.md §5 — tas atildiktan sonra acilan talep penceresi.
+ *
+ * Pencerenin SURESI YOKTUR (§9 0.9). Sirasi gelen oyuncu hamlesini yapana
+ * kadar acik kalir ve o hamleyle kapanir: yerden alirsa tas onundur, desteden
+ * cekerse en oncelikli talep sahibine gider. Kimse talep etmediyse tas yerde
+ * kalir.
+ *
+ * Eskiden 3 saniyelik bir sayac vardi ve sirasi gelen oyuncuyu o kadar
+ * bekletiyordu. Iki sorunu birden vardi: hizli oynayan herkesi geciktiriyor,
+ * dusunen oyuncuya ise gereginden az sure taniyordu. Yeni kural her ikisini
+ * de cozuyor — tepki suresi, sirasi gelenin dusunme suresi kadar.
+ */
 export interface TalepPenceresi {
   readonly atan: OyuncuId;
   /** Yigininin en ustundeki tas — yalnizca bu alinabilir. */
   readonly tasId: TasId;
-  /** Tasin atildigi an (ms). CLAUDE.md #2: zaman motorun disindan gelir. */
-  readonly acilisZamani: number;
-  /** Normal calma talepleri. Oncelik koltuk sirasina gore cozulur. */
+  /**
+   * Normal calma talepleri. Oncelik koltuk sirasina gore cozulur; kim once
+   * bastigi onemli DEGIL (§5).
+   *
+   * Tur 15'in "cifti bende" hakki bu listede DURMAZ: o talep kuyruga
+   * girmiyor, `CIFT_TALEBI` geldigi anda tasi aliyor (§9 0.10).
+   */
   readonly talepler: readonly OyuncuId[];
-  /** Tur 15'e ozgu "cifti bende" talebi. En fazla bir oyuncu hak sahibi olabilir. */
-  readonly ciftTalebi: OyuncuId | null;
 }
 
 export interface OyunDurumu {
@@ -85,6 +99,14 @@ export interface OyunDurumu {
   /** KURALLAR.md §8 — yerdeki bir pere isleyen tas atma sayisi. */
   readonly islerTasSayisi: OyuncuKaydi<number>;
   readonly pencere: TalepPenceresi | null;
+  /**
+   * Masadaki tasi EN SON kim caldi? Bir sonraki atisa kadar dolu kalir.
+   *
+   * Kural karari degil, ekran icin: atik obeginden bir tas eksildiginde onu
+   * kimin aldigini gostermek gerekiyor. Bu alan olmadan istemci "sirasi gelen
+   * aldi" varsayiyor ve calinan tas yanlis oyuncuya ucuyordu.
+   */
+  readonly sonCalan: OyuncuId | null;
   readonly sonuc: ElSonucu | null;
 }
 
@@ -134,6 +156,7 @@ export function elBaslat(
     calinanSayisi: oyuncuKaydiOlustur(() => 0),
     islerTasSayisi: oyuncuKaydiOlustur(() => 0),
     pencere: null,
+    sonCalan: null,
     sonuc: null,
   };
 }

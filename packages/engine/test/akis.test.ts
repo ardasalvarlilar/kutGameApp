@@ -106,7 +106,6 @@ describe('sira akisi — KURALLAR.md §4', () => {
     expect(durum.siradaki).toBe(3);
     expect(durum.faz).toBe('cekme');
     expect(durum.pencere?.tasId).toBe(atilan.id);
-    expect(durum.pencere?.acilisZamani).toBe(1000);
   });
 
   it('atanin sagindaki oyuncu o yigindan bedelsiz alir', () => {
@@ -142,48 +141,52 @@ describe('sira akisi — KURALLAR.md §4', () => {
   });
 });
 
-describe('talep penceresi suresi — KURALLAR.md §5.2, §9.6 (3000 ms)', () => {
+describe('talep penceresi — KURALLAR.md §5, §9 0.9 (suresiz)', () => {
   const atilan = t('kirmizi', 9);
   const durum = durumKur({
     siradaki: 3,
     faz: 'cekme',
-    istakalar: { 3: dolgu(14, [atilan]) },
+    istakalar: {
+      1: dolgu(14, [atilan], 20),
+      2: dolgu(14, [atilan], 40),
+      3: dolgu(14, [atilan], 60),
+    },
     atikYiginlari: { 0: [atilan] },
     deste: dolgu(5, [atilan]),
-    pencere: pencereKur(0, atilan, { acilisZamani: 1000 }),
-  });
-
-  it('varsayilan sure 3000 ms', () => {
-    expect(durum.ayarlar.talepPenceresiMs).toBe(3000);
+    pencere: pencereKur(0, atilan),
   });
 
   const cek = (suAn: number): Aksiyon => ({ tip: 'CEK_DESTEDEN', oyuncu: 3, suAn });
 
-  it('sure dolmadan desteden cekilemez', () => {
-    const sonuc = reduce(durum, cek(3999));
-    expect(sonuc.ok ? 'ok' : sonuc.reason).toBe('pencere-suresi-dolmadi');
+  it('sirasi gelen oyuncu BEKLEMEZ: tas atilir atilmaz desteden cekebilir', () => {
+    // §9 0.9 oncesinde burada 3000 ms'lik bir sayac vardi ve bu cagri
+    // `pencere-suresi-dolmadi` ile reddediliyordu.
+    expect(reduce(durum, cek(0)).ok).toBe(true);
   });
 
-  it('sure dolunca cekilebilir', () => {
-    expect(reduce(durum, cek(4000)).ok).toBe(true);
+  it('yerden alma da beklemez', () => {
+    expect(reduce(durum, { tip: 'CEK_ATIKTAN', oyuncu: 3, suAn: 0 }).ok).toBe(true);
   });
 
-  it('sure yapilandirilabilir', () => {
-    const hizli = durumKur({
-      siradaki: 3,
-      faz: 'cekme',
-      istakalar: { 3: dolgu(14, [atilan]) },
-      atikYiginlari: { 0: [atilan] },
-      deste: dolgu(5, [atilan]),
-      pencere: pencereKur(0, atilan, { acilisZamani: 1000 }),
-      ayarlar: { talepPenceresiMs: 500 },
-    });
-    expect(reduce(hizli, cek(1500)).ok).toBe(true);
+  it('pencere, sirasi gelen oyuncu OYNAYANA KADAR aciktir', () => {
+    // Sirasi gelen dusunurken talep gelebilir; sure siniri yok.
+    const talepli = durumAl(reduce(durum, { tip: 'CALMA_TALEBI', oyuncu: 2, suAn: 90_000 }));
+    expect(talepli.pencere?.talepler).toEqual([2]);
+
+    const sonra = durumAl(reduce(talepli, cek(90_100)));
+    expect(sonra.istakalar[2].map((tas) => tas.id)).toContain(atilan.id);
+    expect(sonra.pencere).toBe(null);
   });
 
-  it('pencere yalnizca desteden cekmeyi geciktirir; yerden alma serbesttir', () => {
-    // KURALLAR.md §5.2 sadece desteden cekmeyi engeller. (Tur 15 istisnasi ayri.)
-    expect(reduce(durum, { tip: 'CEK_ATIKTAN', oyuncu: 3, suAn: 1001 }).ok).toBe(true);
+  it('sirasi gelen oynadiktan sonra talep edilemez — pencere kapandi', () => {
+    const sonra = durumAl(reduce(durum, cek(0)));
+    const gec = reduce(sonra, { tip: 'CALMA_TALEBI', oyuncu: 2, suAn: 10 });
+    expect(gec.ok ? 'ok' : gec.reason).toBe('talep-penceresi-kapali');
+  });
+
+  it('talep edilmemis tas yerde kalir', () => {
+    const sonra = durumAl(reduce(durum, cek(0)));
+    expect(sonra.atikYiginlari[0].map((tas) => tas.id)).toEqual([atilan.id]);
   });
 });
 

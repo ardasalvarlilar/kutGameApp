@@ -1,8 +1,9 @@
 import { defineConfig } from 'tsup';
 
-// Sunucu tek dosyaya paketleniyor ve @kut/engine bundle'in ICINE giriyor —
-// motorun ikinci bir kopyasi hicbir zaman olusmuyor (CLAUDE.md: kuralin tek
-// kaynagi motordur).
+// Sunucu tek dosyaya paketleniyor; @kut/engine ve @kut/politika bundle'in
+// ICINE giriyor — motorun ve bot politikasinin ikinci bir kopyasi hicbir
+// zaman olusmuyor (CLAUDE.md: kuralin tek kaynagi motordur, botun tek
+// kaynagi politikadir).
 //
 // npm bagimliliklari (express, socket.io, mongoose) DISARIDA birakiliyor:
 // dinamik require ve native eklenti kullandiklari icin paketlenince
@@ -17,5 +18,5 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   // Yerel calisan bagimliliklar bundle'a girmesin; node_modules'tan gelsinler.
-  noExternal: ['@kut/engine'],
+  noExternal: ['@kut/engine', '@kut/politika'],
 });

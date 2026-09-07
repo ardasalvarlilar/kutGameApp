@@ -14,10 +14,11 @@ import { Orta } from './bilesenler/Orta';
 import { OyuncuSeridi } from './bilesenler/OyuncuSeridi';
 import { PerAlani } from './bilesenler/PerAlani';
 import { PuanTablosu } from './bilesenler/PuanTablosu';
+import { SiraSayaci } from './bilesenler/SiraSayaci';
 import { Ayarlar, type MasadakiOyuncu } from './bilesenler/Ayarlar';
 import type { SikayetSebebi } from './ag/api';
 import { UcanTas, type Nokta, type Ucus } from './bilesenler/UcanTas';
-import { gruplariKimlige, kutDiz, seriDiz } from './dizme';
+import { gruplariKimlige, kutDiz, seriDiz } from '@kut/politika';
 import { bitirenTaslar, eldenBitmeCozumu } from './eldenBitme';
 import {
   ayir,
@@ -49,7 +50,6 @@ import type { MasaSurucusu } from './surucu';
 import { yetkiler } from './yetkiler';
 import { sesGirdisi } from './ses';
 import { useSes, useSesSecici } from './sesCalar';
-import { ACIL_ESIGI_MS, kalanSiraSuresi } from './sure';
 import { renkler } from './tema';
 
 // Oyun saat yonunde doner (KURALLAR.md §4): attigim tasi SAGIMDAKI alir.
@@ -126,7 +126,6 @@ export function Masa({
   const [sutunSayisi, setSutunSayisi] = useState(20);
   const [duzen, setDuzen] = useState<Duzen>([]);
   const [secili, setSecili] = useState<readonly TasId[]>([]);
-  const [an, setAn] = useState(() => Date.now());
   const [masaOlcu, setMasaOlcu] = useState({ en: 0, boy: 0 });
   const [ucus, setUcus] = useState<Ucus | null>(null);
   const [ayarlarAcik, setAyarlarAcik] = useState(false);
@@ -148,20 +147,28 @@ export function Masa({
 
   const istakam = gorunum.istakam;
 
+  // Istaka degistiginde duzeni ve secimi hizala.
+  //
+  // Iki guncelleyici de DEGISIKLIK YOKSA ONCEKI DEGERI donduruyor. Cevrimici
+  // oyunda her sunucu paketi yeni bir `istakam` dizisi getiriyor ve bu effect
+  // her pakette kosuyor; yeni dizi dondurmek, rakip hamlelerinde bile masayi
+  // iki kez yeniden cizdiriyordu.
   useEffect(() => {
     setDuzen((onceki) => duzenTazele(onceki, istakam, sutunSayisi));
-    setSecili((onceki) => onceki.filter((id) => istakam.some((tas) => tas.id === id)));
+    setSecili((onceki) => {
+      const kalan = onceki.filter((id) => istakam.some((tas) => tas.id === id));
+      return kalan.length === onceki.length ? onceki : kalan;
+    });
   }, [istakam, sutunSayisi]);
 
-  // Hem talep penceresi hem sira suresi geri sayiyor; ikisinden biri
-  // acikken saat isliyor.
+  // Masada artik SAAT ISLEMIYOR.
+  //
+  // Iki sayac vardi: talep penceresi ve sira suresi. Ilki §9 0.9 ile kalkti;
+  // ikincisi `bilesenler/SiraSayaci.tsx`e tasindi. Onceden 200 ms'de bir
+  // tiklayan bir state buradaydi ve her tikte BUTUN masa yeniden ciziliyordu
+  // — istaka, per alanlari, ortadaki obek, yan panel. Sayac kendi bilesenine
+  // cekilince tikin dokundugu yer o kucuk kutuyla sinirli kaldi.
   const elBitti = gorunum.faz === 'el-bitti';
-  useEffect(() => {
-    if (elBitti || (gorunum.pencere === null && siraBitisi === null)) return;
-    setAn(Date.now());
-    const sayac = setInterval(() => setAn(Date.now()), 200);
-    return () => clearInterval(sayac);
-  }, [gorunum.pencere, siraBitisi, elBitti]);
 
   // Masadaki oturma yerleri — ucan tas animasyonu bu noktalar arasinda gider.
   // Koltuk numarasi degil YERLESIM belirliyor: kendi koltugum hangisi olursa
@@ -209,11 +216,13 @@ export function Masa({
         return;
       }
       if (simdi.atikAdet[oyuncu] < onceki.atikAdet[oyuncu]) {
+        // Tasi CALAN olabilir: sirasi gelen oyuncu degil (§5). `sonCalan`
+        // olmadan calinan tas hep sirasi gelene ucuyordu.
         setUcus({
           anahtar: `al-${oyuncu}-${simdi.atikAdet[oyuncu]}`,
           tas: null,
           baslangic: merkezNokta,
-          bitis: koltukNoktasi(onceki.siradaki),
+          bitis: koltukNoktasi(gorunum.sonCalan ?? onceki.siradaki),
         });
         return;
       }
@@ -243,7 +252,10 @@ export function Masa({
     if (efekt !== null) cal(efekt);
   }, [gorunum, sesSecici, cal]);
 
-  const izin = useMemo(() => yetkiler(gorunum, an), [gorunum, an]);
+  // §9 0.9 — yetkiler artik ZAMANA bagli degil (talep penceresinin suresi
+  // kalkti). `an` bagimliligini birakmak bosuna hesap degil: `an` 200 ms'de
+  // bir tikliyor ve bu memo o tempoda yeniden kosuyordu.
+  const izin = useMemo(() => yetkiler(gorunum), [gorunum]);
   const sart = turSarti(gorunum.tur);
   const gruplar = useMemo(() => duzenGruplari(duzen, sutunSayisi), [duzen, sutunSayisi]);
 
@@ -499,19 +511,15 @@ export function Masa({
     return islemePlani(gonderilecek, istakam, gorunum.yer).length > 0;
   }, [secili, gorunum.islerTaslarim, gorunum.yer, istakam, gruplar]);
 
-  const kalanSure = gorunum.pencere === null ? 0 : Math.max(0, gorunum.pencere.kapanisZamani - an);
   const atikAlinabilir = izin.yerdenAlabilir && gorunum.atikUstu !== null;
 
-  // Sira suresi geri sayimi — sure dolunca src/oyun.ts yerine oynuyor.
-  const kalanSira = kalanSiraSuresi(siraBitisi, an);
   // §9 0.4 — suresini dolduran oyuncunun hakki 30 → 20 → 10 diye iner.
   // Kademeyi surucu bildirmiyor (sunucu tarafinda tutuluyor); tam sureden
   // kisa olmasi zaten kademeye inildiginin ta kendisi.
   const tamSure = gorunum.ayarlar.siraSureleriMs[0] ?? siraSuresi;
   const sureKisaldi = siraSuresi > 0 && siraSuresi < tamSure;
-  const siraSayaciVar = siraBitisi !== null && !elBitti;
-  const siraAcil = kalanSira <= ACIL_ESIGI_MS;
-  const siraOrani = siraSuresi > 0 ? Math.round((kalanSira / siraSuresi) * 100) : 0;
+  // Geri sayimin kendisi SiraSayaci'nda; buradan giden yalnizca bitis ani.
+  const sayacBitisi = elBitti ? null : siraBitisi;
   const fazMetni = elBitti
     ? 'El bitti'
     : gorunum.siradaki === INSAN
@@ -583,19 +591,29 @@ export function Masa({
               </View>
             ) : null}
 
-            {/* Geri sayim masanin sol ust kosesinde; ortayi kapatmiyor */}
+            {/* Talep penceresi masanin sol ust kosesinde; ortayi kapatmiyor.
+                GERI SAYIM YOK (§9 0.9): pencere sirasi gelen oyuncu oynayana
+                kadar acik. Gosterilecek sey sure degil, taleplerin kendisi —
+                sirasi gelen oyuncu "kim istiyor"a bakip karar veriyor. */}
             {gorunum.pencere !== null && !elBitti ? (
               <View style={stil.pencere}>
-                <Text style={stil.pencereBaslik}>
-                  {ADLAR[gorunum.pencere.atan]} attı · {(kalanSure / 1000).toFixed(1)} sn
-                </Text>
+                <Text style={stil.pencereBaslik}>{ADLAR[gorunum.pencere.atan]} attı</Text>
                 <Text style={stil.pencereMetin}>
-                  {gorunum.pencere.ciftTalebi !== null
-                    ? `${ADLAR[gorunum.pencere.ciftTalebi]}: çifti bende!`
-                    : gorunum.pencere.talepler.length > 0
-                      ? `${gorunum.pencere.talepler.map((o) => ADLAR[o]).join(', ')} istiyor`
-                      : 'talep yok'}
+                  {gorunum.pencere.talepler.length > 0
+                    ? `${gorunum.pencere.talepler.map((o) => ADLAR[o]).join(', ')} istiyor`
+                    : gorunum.siradaki === INSAN
+                      ? 'talep yok — taş senin'
+                      : `${ADLAR[gorunum.siradaki]} karar veriyor`}
                 </Text>
+              </View>
+            ) : null}
+
+            {/* Cift calmasi ANINDA sonuclaniyor (§9 0.10): tas bir anda
+                masadan kalkiyor. Kimin aldigini soylemezsek oyuncu neyin
+                olduğunu anlamiyor — atik obegi sessizce bosaliyor. */}
+            {gorunum.sonCalan !== null && !elBitti ? (
+              <View style={stil.calmaUyarisi}>
+                <Text style={stil.calmaYazi}>{ADLAR[gorunum.sonCalan]} taşı çaldı</Text>
               </View>
             ) : null}
 
@@ -621,23 +639,8 @@ export function Masa({
                   dugme satiri ancak boyle sigiyor. */}
               <View style={stil.durumUst}>
                 <Text style={stil.turMetni}>TUR {gorunum.tur}/16</Text>
-                {siraSayaciVar ? (
-                  <Text style={[stil.sayacMetin, siraAcil && stil.sayacAcil]}>
-                    {(kalanSira / 1000).toFixed(1)} sn
-                  </Text>
-                ) : null}
+                <SiraSayaci bitis={sayacBitisi} sure={siraSuresi} />
               </View>
-              {siraSayaciVar ? (
-                <View style={stil.sayacYol}>
-                  <View
-                    style={[
-                      stil.sayacDolgu,
-                      { width: `${siraOrani}%` },
-                      siraAcil && stil.sayacDolguAcil,
-                    ]}
-                  />
-                </View>
-              ) : null}
               <Text style={stil.sartMetni}>{sart.aciklama}</Text>
               <Text style={stil.fazMetni}>
                 {fazMetni}
@@ -775,6 +778,16 @@ const stil = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
+  calmaUyarisi: {
+    position: 'absolute',
+    top: 6,
+    alignSelf: 'center',
+    backgroundColor: renkler.vurgu,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  calmaYazi: { color: '#2a2000', fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
   pencereBaslik: { color: renkler.vurgu, fontSize: 10, fontWeight: '800' },
   pencereMetin: { color: renkler.metin, fontSize: 9 },
 
@@ -814,17 +827,6 @@ const stil = StyleSheet.create({
   // Sira suresi geri sayimi (KURALLAR.md §9 0.4). Sure dolunca src/oyun.ts
   // oyuncunun yerine oynuyor; buradaki cubuk yalnizca gostergedir.
   durumUst: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
-  sayacMetin: { color: renkler.vurgu, fontSize: 12, fontWeight: '800' },
-  sayacAcil: { color: renkler.uyari },
-  sayacYol: {
-    marginTop: 2,
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: renkler.arkaKoyu,
-    overflow: 'hidden',
-  },
-  sayacDolgu: { height: 3, borderRadius: 2, backgroundColor: renkler.vurgu },
-  sayacDolguAcil: { backgroundColor: renkler.uyari },
   dugmeler: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, paddingBottom: 2 },
   hata: { color: renkler.uyari, fontSize: 10, minHeight: 22 },
 

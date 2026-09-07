@@ -49,8 +49,25 @@ export interface Kimlik {
     yeniParola: string,
   ) => Promise<string | null>;
   readonly adiDegistir: (ad: string) => Promise<string | null>;
+  /** Parolasini BILEN oyuncunun degistirmesi; mevcut parola zorunlu. */
+  readonly parolayiDegistir: (
+    mevcutParola: string,
+    yeniParola: string,
+  ) => Promise<string | null>;
   /** App Store 5.1.1(v) — hesabi ve kisisel verileri kalici olarak siler. */
   readonly hesabiSil: () => Promise<string | null>;
+
+  // --- Arkadaslik ------------------------------------------------------------
+  //
+  // Liste burada duruyor cunku iki ekran birden okuyor: lobi (arkadasin
+  // masasina katil) ve profil (liste, istekler, kod). Ekran basina ayri bir
+  // cekim, ikisinin farkli listeler gostermesi demek olurdu.
+  readonly arkadaslar: api.ArkadasDurumu | null;
+  readonly arkadaslariTazele: () => Promise<void>;
+  readonly arkadasAra: (kod: string) => Promise<api.BulunanOyuncu | null | string>;
+  readonly arkadasIstegi: (oyuncuId: string) => Promise<string | null>;
+  readonly arkadasKabul: (oyuncuId: string) => Promise<string | null>;
+  readonly arkadasSil: (oyuncuId: string) => Promise<string | null>;
 
   // --- Sikayet ve engelleme (App Store 1.2) ---------------------------------
   readonly engellenenler: readonly api.EngelliOzeti[];
@@ -75,6 +92,7 @@ export function KimlikSaglayici({ children }: { readonly children: ReactNode }) 
   const [soket, setSoket] = useState<Socket | null>(null);
   const [bagli, setBagli] = useState(false);
   const [engellenenler, setEngellenenler] = useState<readonly api.EngelliOzeti[]>([]);
+  const [arkadaslar, setArkadaslar] = useState<api.ArkadasDurumu | null>(null);
   const jetonRef = useRef<string | null>(null);
 
   /** Giris sonucunu uygular: jetonu sakla, soketi ac, ekrani gecir. */
@@ -202,6 +220,7 @@ export function KimlikSaglayici({ children }: { readonly children: ReactNode }) 
     setOyuncu(null);
     setBagli(false);
     setEngellenenler([]);
+    setArkadaslar(null);
     setDurum('giris');
   }, []);
 
@@ -241,6 +260,21 @@ export function KimlikSaglayici({ children }: { readonly children: ReactNode }) 
     setOyuncu(sonuc.veri.oyuncu);
     return null;
   }, []);
+
+  const parolayiDegistir = useCallback(
+    async (mevcutParola: string, yeniParola: string): Promise<string | null> => {
+      const jeton = jetonRef.current;
+      if (jeton === null) return 'Oturum yok';
+      const sonuc = await api.parolayiDegistir(jeton, mevcutParola, yeniParola);
+      if (!sonuc.ok) return sonuc.hata;
+      // Sunucu taze bir jeton doner; eskisini tutmanin anlami yok.
+      jetonRef.current = sonuc.veri.jeton;
+      await jetonuYaz(sonuc.veri.jeton);
+      setOyuncu(sonuc.veri.oyuncu);
+      return null;
+    },
+    [],
+  );
 
   const hesabiSil = useCallback(async (): Promise<string | null> => {
     const jeton = jetonRef.current;
@@ -293,11 +327,67 @@ export function KimlikSaglayici({ children }: { readonly children: ReactNode }) 
     [],
   );
 
+  // --- Arkadaslik -----------------------------------------------------------
+  //
+  // Durum degistiren her uc GUNCEL LISTEYI de donuyor, bu yuzden islemden
+  // sonra ikinci bir GET atilmiyor: iki istek arasinda eskimis liste
+  // gostermenin onune geciyor.
+
+  const arkadaslariTazele = useCallback(async (): Promise<void> => {
+    const jeton = jetonRef.current;
+    if (jeton === null) return;
+    const sonuc = await api.arkadaslariGetir(jeton);
+    if (sonuc.ok) setArkadaslar(sonuc.veri);
+  }, []);
+
+  /** Bulunan oyuncu, "bulunamadi" icin null, hata icin metin. */
+  const arkadasAra = useCallback(
+    async (kod: string): Promise<api.BulunanOyuncu | null | string> => {
+      const jeton = jetonRef.current;
+      if (jeton === null) return 'Oturum yok';
+      const sonuc = await api.arkadasAra(jeton, kod.trim());
+      return sonuc.ok ? sonuc.veri.bulunan : sonuc.hata;
+    },
+    [],
+  );
+
+  const arkadasIstegi = useCallback(async (oyuncuId: string): Promise<string | null> => {
+    const jeton = jetonRef.current;
+    if (jeton === null) return 'Oturum yok';
+    const sonuc = await api.arkadasIstegi(jeton, oyuncuId);
+    if (!sonuc.ok) return sonuc.hata;
+    setArkadaslar(sonuc.veri);
+    return null;
+  }, []);
+
+  const arkadasKabul = useCallback(async (oyuncuId: string): Promise<string | null> => {
+    const jeton = jetonRef.current;
+    if (jeton === null) return 'Oturum yok';
+    const sonuc = await api.arkadasKabul(jeton, oyuncuId);
+    if (!sonuc.ok) return sonuc.hata;
+    setArkadaslar(sonuc.veri);
+    return null;
+  }, []);
+
+  const arkadasSil = useCallback(async (oyuncuId: string): Promise<string | null> => {
+    const jeton = jetonRef.current;
+    if (jeton === null) return 'Oturum yok';
+    const sonuc = await api.arkadasSil(jeton, oyuncuId);
+    if (!sonuc.ok) return sonuc.hata;
+    setArkadaslar(sonuc.veri);
+    return null;
+  }, []);
+
   // Oturum acilinca engel listesini bir kez cek: masada "engelle" dugmesinin
   // hali (engelli mi degil mi) buna bagli.
+  //
+  // Arkadas listesi de burada: lobideki "arkadasin masasina katil" satiri
+  // ekran acilir acilmaz dolu olsun.
   useEffect(() => {
-    if (durum === 'hazir') void engelleriTazele();
-  }, [durum, engelleriTazele]);
+    if (durum !== 'hazir') return;
+    void engelleriTazele();
+    void arkadaslariTazele();
+  }, [durum, engelleriTazele, arkadaslariTazele]);
 
   const deger = useMemo<Kimlik>(
     () => ({
@@ -313,12 +403,19 @@ export function KimlikSaglayici({ children }: { readonly children: ReactNode }) 
       parolaKoduIste,
       parolayiSifirla,
       adiDegistir,
+      parolayiDegistir,
       hesabiSil,
       engellenenler,
       engelleriTazele,
       engelle,
       engelKaldir,
       sikayetEt,
+      arkadaslar,
+      arkadaslariTazele,
+      arkadasAra,
+      arkadasIstegi,
+      arkadasKabul,
+      arkadasSil,
     }),
     [
       durum,
@@ -333,12 +430,19 @@ export function KimlikSaglayici({ children }: { readonly children: ReactNode }) 
       parolaKoduIste,
       parolayiSifirla,
       adiDegistir,
+      parolayiDegistir,
       hesabiSil,
       engellenenler,
       engelleriTazele,
       engelle,
       engelKaldir,
       sikayetEt,
+      arkadaslar,
+      arkadaslariTazele,
+      arkadasAra,
+      arkadasIstegi,
+      arkadasKabul,
+      arkadasSil,
     ],
   );
 

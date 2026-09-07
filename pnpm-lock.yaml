@@ -20,6 +20,9 @@ importers:
       '@kut/engine':
         specifier: workspace:*
         version: link:../../packages/engine
+      '@kut/politika':
+        specifier: workspace:*
+        version: link:../../packages/politika
       expo:
         specifier: ~54.0.0
         version: 54.0.37(@babel/core@7.29.7(supports-color@8.1.1))(@expo/dom-webview@57.0.1)(@expo/metro-runtime@6.1.2)(react-native@0.81.5(@babel/core@7.29.7(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0)(supports-color@8.1.1)(typescript@5.9.3)
@@ -82,11 +85,30 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.20.1)(lightningcss@1.33.0)(supports-color@8.1.1)(terser@5.51.0)
 
+  packages/politika:
+    dependencies:
+      '@kut/engine':
+        specifier: workspace:*
+        version: link:../engine
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.20.1
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.20.1)(lightningcss@1.33.0)(supports-color@8.1.1)(terser@5.51.0)
+
   packages/server:
     dependencies:
       '@kut/engine':
         specifier: workspace:*
         version: link:../engine
+      '@kut/politika':
+        specifier: workspace:*
+        version: link:../politika
       bcryptjs:
         specifier: ^2.4.3
         version: 2.4.3

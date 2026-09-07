@@ -80,12 +80,37 @@ Mobil uygulamanın kodları sunucuya **hiç gitmez**.
 | POST | `/api/kimlik/parola-sifirla` | Kod + yeni parola → oturum açar |
 | POST | `/api/kimlik/yukselt` | Oturumu açık misafiri hesaba çevirir (jeton ister) |
 | POST | `/api/kimlik/ad` | Görünen adı değiştir (jeton ister) |
+| POST | `/api/kimlik/parola` | Parolayı değiştir — **mevcut parola zorunlu** |
 | GET | `/api/kimlik/ben` | Jetonun sahibi |
 | DELETE | `/api/kimlik/hesap` | **Hesabı siler** (App Store 5.1.1(v)) |
 | POST | `/api/moderasyon/sikayet` | Oyuncuyu bildir |
 | POST | `/api/moderasyon/engelle` | Oyuncuyu engelle |
 | POST | `/api/moderasyon/engel-kaldir` | Engeli kaldır |
 | GET | `/api/moderasyon/engellenenler` | Engel listesi |
+| GET | `/api/arkadas` | Arkadaşlar + gelen/giden istekler + kendi kodun |
+| GET | `/api/arkadas/ara?kod=` | Arkadaş koduyla oyuncu ara |
+| POST | `/api/arkadas/istek` | İstek gönder |
+| POST | `/api/arkadas/kabul` | Gelen isteği kabul et |
+| POST | `/api/arkadas/sil` | İsteği reddet ya da arkadaşlığı bitir |
+
+### Arkadaşlık
+
+Üç karar şeklini belirledi:
+
+- **Çift başına tek belge.** `Arkadaslik` koleksiyonu kimlikleri metin
+  sırasına koyup (`kucuk`/`buyuk`) üstüne benzersiz indeks basıyor. İstek
+  başına belge, iki kişi aynı anda birbirine istek attığında iki ayrı
+  "bekliyor" kaydı bırakıyordu; ikisi de karşı tarafın kabulünü bekliyordu.
+  Karşılıklı istek artık doğrudan **arkadaşlık** oluyor.
+- **Arama yalnızca arkadaş koduyla** (`KUT-7F3A9`). Görünen ad benzersiz
+  değil; e-postayla aramak ise hangi adreslerin kayıtlı olduğunu sızdırır.
+  Kod tembel üretiliyor: ilk `/api/arkadas` çağrısında.
+- **Engel arkadaşlığın önüne geçiyor.** Engellenen kişi listede görünmez ve
+  ona istek gönderilemez; kodla da bulunamaz. İlişki silinmiyor — engel
+  kalkarsa arkadaşlık geri geliyor (App Store 1.2 "geri alabilme").
+
+Bir arkadaşın bekleyen masası varsa kodu listede görünür; katılmak tek
+dokunuş. Özelliğin bütün amacı buydu: kodu her oturumda yeniden paylaşmamak.
 
 Ayrıca dört HTML sayfası (`rotalar/sayfalar.ts`), API dışında:
 `/gizlilik` · `/kosullar` · `/destek` · `/hesap-sil`. App Store Connect
@@ -98,6 +123,20 @@ oynanmışsa **aynı belgenin** üstüne e-posta biner, ilerleme kaybolmaz.
 Giriş uçlarında oran sınırı var (`araKatman/oranSiniri.ts`): 15 dakikada 20
 parola denemesi. Sayaç bellekte, yani süreç başına — çok süreçli kurulumda
 Redis'e taşınmalı.
+
+### Masa düzeni (soket)
+
+| Olay | İş |
+|---|---|
+| `masa:botDoldur` | Boş koltukları botla doldur — yalnızca masayı açan |
+| `masa:botCikar` | Bir bot koltuğunu boşalt |
+| `masa:koltugaGec` | Boş bir koltuğa geç (atomik) |
+| `masa:koltukTalebi` | Dolu koltuk için değiştirme talebi bırak |
+| `masa:koltukCevap` | Gelen talebi kabul et / reddet → koltuklar takas olur |
+
+Botu sunucu oynatıyor (`soket/masaOturumu.ts`), kararı `@kut/politika`da —
+çevrimdışı masadaki yer tutucularla **aynı kod**. Sıra süresinden ayrı, kısa
+bir zamanlayıcı kullanıyor; sıra süresi güvenlik ağı olarak duruyor.
 
 Oyunun kendisi soket üzerinden akar; olay listesi `MIMARI.md §2`de.
 
@@ -117,6 +156,8 @@ Dört dosya:
 | `kimlik.test.ts` | **gerekir** | Kayıt, giriş, misafir yükseltme |
 | `hesapYonetimi.test.ts` | **gerekir** | Parola sıfırlama, hesap silme, şikâyet, engelleme |
 | `koltukYarisi.test.ts` | **gerekir** | Aynı anda katılan oyuncular ayrı koltuklara oturuyor mu |
+| `arkadas.test.ts` | **gerekir** | Kod, istek/kabul/silme, engel kesişimi, parola değiştirme |
+| `masaDuzeni.test.ts` | **gerekir** | Bot koltukları (bot gerçekten oynuyor mu), koltuk seçme ve takas |
 | `cevrimici.test.ts` | **gerekir** | Dört istemciyle uçtan uca soket akışı |
 
 Mongo yoksa `gerekir` yazanlar **atlanır**. Yerelde, atılabilir bir Mongo

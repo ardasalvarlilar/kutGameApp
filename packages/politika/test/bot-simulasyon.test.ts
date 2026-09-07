@@ -8,7 +8,7 @@ import {
   type OyuncuId,
   type TurNo,
 } from '@kut/engine';
-import { atilacakTas, botAksiyonu } from './bot';
+import { atilacakTas, botAksiyonu } from '../src/bot';
 
 // Dort yer tutucu oyuncuyla bastan sona el oynatir.
 // Amaci iki sey: botun gecerli hamle uretmesi ve gercekten acabilmesi.

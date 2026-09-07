@@ -92,15 +92,13 @@ export type HataKodu =
   | 'son-tas-atilmali'
   // Talep penceresi ve calma
   | 'talep-penceresi-kapali'
-  | 'pencere-suresi-dolmadi'
   | 'zaten-talep-ettin'
   | 'atan-talep-edemez'
   | 'sirasi-olan-talep-edemez'
   | 'cift-talebi-sadece-tur-15'
   | 'cift-calma-hakki-kapali'
   | 'cift-elinde-yok'
-  | 'cift-talebi-oncelikli'
-  | 'zaten-cift-talebi-var'
+  | 'ceza-tasi-kalmadi'
   // Acma ve isleme
   | 'zaten-actin'
   | 'acmadin'

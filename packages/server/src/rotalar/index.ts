@@ -15,6 +15,7 @@ import {
   hesapSil,
   kayit,
   misafir,
+  parolaDegistir,
   parolaSifirla,
   parolaUnuttum,
   sikayet,
@@ -24,6 +25,13 @@ import {
   bildirimJetonuKaydet,
   bildirimJetonuSil,
 } from '../denetleyiciler/bildirimDenetleyicisi.js';
+import {
+  ara as arkadasAra,
+  arkadaslar,
+  istek as arkadasIstegi,
+  kabul as arkadasKabul,
+  sil as arkadasSil,
+} from '../denetleyiciler/arkadasDenetleyicisi.js';
 import { kimlikDogrula } from '../araKatman/kimlikDogrula.js';
 import { oranSiniri } from '../araKatman/oranSiniri.js';
 
@@ -63,6 +71,8 @@ export function rotalariKur(): Router {
   rota.post('/kimlik/parola-sifirla', parolaSiniri, sar(parolaSifirla));
 
   rota.post('/kimlik/yukselt', kimlikDogrula, parolaSiniri, sar(yukselt));
+  // Parola degistirme de bir bcrypt karsilastirmasi: parola siniri altinda.
+  rota.post('/kimlik/parola', kimlikDogrula, parolaSiniri, sar(parolaDegistir));
   rota.post('/kimlik/ad', kimlikDogrula, genelSinir, sar(adDegistir));
   rota.get('/kimlik/ben', kimlikDogrula, sar(ben));
 
@@ -80,6 +90,15 @@ export function rotalariKur(): Router {
   rota.post('/moderasyon/engelle', kimlikDogrula, genelSinir, sar(engelEkle));
   rota.post('/moderasyon/engel-kaldir', kimlikDogrula, genelSinir, sar(engelSil));
   rota.get('/moderasyon/engellenenler', kimlikDogrula, sar(engelListesi));
+
+  // Arkadaslik. Arama ayri ve DAR bir sinirda: kod tahmin edilemez olsa da
+  // deneme yanilmayla taranmasinin onune geciyor.
+  const aramaSiniri = oranSiniri({ pencereMs: 60 * 1000, enFazla: 20 });
+  rota.get('/arkadas', kimlikDogrula, sar(arkadaslar));
+  rota.get('/arkadas/ara', kimlikDogrula, aramaSiniri, sar(arkadasAra));
+  rota.post('/arkadas/istek', kimlikDogrula, genelSinir, sar(arkadasIstegi));
+  rota.post('/arkadas/kabul', kimlikDogrula, genelSinir, sar(arkadasKabul));
+  rota.post('/arkadas/sil', kimlikDogrula, genelSinir, sar(arkadasSil));
 
   return rota;
 }

@@ -12,12 +12,43 @@ import { Schema, model, type InferSchemaType, type Model } from 'mongoose';
 export const MASA_DURUMLARI = ['bekliyor', 'oynaniyor', 'bitti'] as const;
 export type MasaDurumu = (typeof MASA_DURUMLARI)[number];
 
+/** Bot koltuklarinin adlari — koltuk numarasina gore sabit. */
+export const BOT_ADLARI = ['Bot Ada', 'Bot Bora', 'Bot Ceren', 'Bot Deniz'] as const;
+
 const koltukSemasi = new Schema(
   {
     /** 0..3 — motorun `OyuncuId`si. */
     no: { type: Number, required: true, min: 0, max: 3 },
-    oyuncu: { type: Schema.Types.ObjectId, ref: 'Oyuncu', required: true },
+    /**
+     * Koltukta oturan oyuncu. BOT koltugunda YOKTUR — bu yuzden `required`
+     * degil. Oyunun dort koltugu da dolu olmak zorunda (motor dort oyuncusuz
+     * ilerlemiyor) ama dordunun de insan olmasi gerekmiyor.
+     */
+    oyuncu: { type: Schema.Types.ObjectId, ref: 'Oyuncu' },
+    /** Bu koltugu sunucunun botu mu oynuyor? */
+    bot: { type: Boolean, required: true, default: false },
     hazir: { type: Boolean, required: true, default: false },
+  },
+  { _id: false },
+);
+
+/**
+ * Koltuk degistirme talebi.
+ *
+ * Bos koltuga gecmek talep gerektirmiyor — orada kimsenin onayina ihtiyac
+ * yok. DOLU bir koltuga gecmek iki tarafi da ilgilendirdigi icin oturanin
+ * onayindan geciyor: masada kimin nerede oturdugu oyunun kendisini
+ * degistiriyor (attigin tasi sagindaki alir, §4/§5).
+ *
+ * Belgede duruyor, bellekte degil: bekleyen masa sunucu yeniden baslatildiginda
+ * silinmiyor (yalnizca `oynaniyor` olanlar kapaniyor), talebin de kaybolmamasi
+ * gerekiyor.
+ */
+const koltukTalebiSemasi = new Schema(
+  {
+    isteyen: { type: Schema.Types.ObjectId, ref: 'Oyuncu', required: true },
+    /** Gecmek istedigi koltuk. Cevap verirken oranin HALA o kisinin olmasi aranir. */
+    hedefKoltuk: { type: Number, required: true, min: 0, max: 3 },
   },
   { _id: false },
 );
@@ -32,6 +63,8 @@ const masaSemasi = new Schema(
     ozel: { type: Boolean, required: true, default: true },
 
     koltuklar: { type: [koltukSemasi], required: true, default: [] },
+    /** Bekleyen koltuk degistirme talepleri; el basladiginda temizlenir. */
+    koltukTalepleri: { type: [koltukTalebiSemasi], required: true, default: [] },
 
     /** Kacinci turdayiz (1..16). Mac bitince `durum` 'bitti' olur. */
     tur: { type: Number, required: true, default: 1, min: 1, max: 16 },

@@ -17,7 +17,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   elBaslat,
-  kalanPencereSuresi,
   macKazanani,
   oyuncuKaydiOlustur,
   reduce,
@@ -31,7 +30,7 @@ import {
   type OyunDurumu,
   type TurNo,
 } from '@kut/engine';
-import { botAksiyonu } from './bot';
+import { botAksiyonu } from '@kut/politika';
 import { hataMetni } from './hataMetinleri';
 import type { MasaSurucusu } from './surucu';
 import {
@@ -39,7 +38,7 @@ import {
   kademeSuresi,
   kademeleriSifirla,
   sureDolduAksiyonu,
-} from './sure';
+} from '@kut/politika';
 
 export const INSAN: OyuncuId = 0;
 
@@ -79,6 +78,34 @@ const YEREL_ADLAR: Record<OyuncuId, string> = {
 
 /** Tur sonu tablosunun ekranda kalma suresi (sn) — okunacak kadar. */
 const TUR_ARASI_SN = 5;
+
+/** Yer tutucu oyuncunun normal dusunme suresi (ms). */
+const BOT_BEKLEMESI_MS = 700;
+
+/**
+ * Insanin "ISTIYORUM" diyebilmesi icin tanidigimiz sure (ms).
+ *
+ * §9 0.9 ile talep penceresinin sabit suresi kalkti: pencere artik sirasi
+ * gelen oyuncu OYNAYANA KADAR acik. Cevrimici masada bunun karsiligi var —
+ * sirasi gelen insan dusunurken digerleri karar verir. Cevrimdisi masada ise
+ * sirasi gelen bir yer tutucu; 700 ms'de cekseydi insanin calma hakki
+ * fiilen yok olurdu. Bu bir KURAL DEGIL, yer tutucunun temposu.
+ */
+const BOT_CALMA_PAYI_MS = 2600;
+
+/**
+ * Sirasi gelen yer tutucu ne kadar bekleyecek?
+ *
+ * Cekme fazinda ve masada insanin calabilecegi bir tas varsa daha uzun:
+ * insan ne atan ne de sirasi gelen ise "ISTIYORUM" diyebilir (§5).
+ */
+function botBeklemesi(durum: OyunDurumu): number {
+  if (durum.faz !== 'cekme') return 800;
+  const pencere = durum.pencere;
+  const insanCalabilir =
+    pencere !== null && pencere.atan !== INSAN && durum.siradaki !== INSAN;
+  return insanCalabilir ? BOT_CALMA_PAYI_MS : BOT_BEKLEMESI_MS;
+}
 
 export function useOyun(baslangicTuru: TurNo = 1): OyunArayuzu {
   const [durum, setDurum] = useState<OyunDurumu>(() =>
@@ -156,10 +183,7 @@ export function useOyun(baslangicTuru: TurNo = 1): OyunArayuzu {
     if (durum.siradaki === INSAN) return;
 
     const siradaki = durum.siradaki;
-    const bekleme =
-      durum.faz === 'cekme'
-        ? Math.max(700, kalanPencereSuresi(durum, Date.now()) + 150)
-        : 800;
+    const bekleme = botBeklemesi(durum);
 
     const zamanlayici = setTimeout(() => {
       // Bir sirada birden cok hamle olabilir: acilis, isleme, sonra atis.
@@ -184,7 +208,6 @@ export function useOyun(baslangicTuru: TurNo = 1): OyunArayuzu {
           if (kurtarma === null || !gonder(kurtarma)) {
             // Hala ilerleyemedik. Reddedilen aksiyon durumu degistirmedigi
             // icin bu effect bir daha kosmaz; sayaci artirip yeniden dene.
-            // (Ornegin talep penceresi henuz kapanmamissa, kapaninca gecer.)
             setBotTetik((sayac) => sayac + 1);
           }
           break;
@@ -232,13 +255,10 @@ export function useOyun(baslangicTuru: TurNo = 1): OyunArayuzu {
         );
         if (aksiyon === null) break;
 
-        if (!gonder(aksiyon)) {
-          // Tek beklenen ret: talep penceresi henuz kapanmadi (§5.2).
-          // Kapanmasini bekleyip yeniden dene; baska bir sebepse birak.
-          const kalan = kalanPencereSuresi(durumRef.current, Date.now());
-          if (kalan > 0) setSiraBitisi(Date.now() + kalan + 50);
-          break;
-        }
+        // Motor reddettiyse israr etmenin anlami yok: durum degismedigi icin
+        // ayni aksiyon yine reddedilir. (§9 0.9'dan once burada bir istisna
+        // vardi — talep penceresinin kapanmasini beklemek; o sure kalkti.)
+        if (!gonder(aksiyon)) break;
         yerineOynandi = true;
         if (aksiyon.tip === 'AT') break;
       }

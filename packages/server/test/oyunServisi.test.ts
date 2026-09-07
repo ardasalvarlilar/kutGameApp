@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { OYUNCULAR, type OyuncuId } from '@kut/engine';
 import { OyunServisi } from '../src/servisler/oyunServisi.js';
-import { atilacakTas, atilacakTasSec } from '../src/soket/yerineOyna.js';
+import { atilacakTas, sureDolduAksiyonu } from '@kut/politika';
 
 // Sunucu otoriter: karari motor veriyor, bu sinif yalnizca sariyor.
 // Testler motorun kurallarini degil, KABUGUN dogru sardigini dogruluyor.
@@ -139,7 +139,7 @@ describe('OyunServisi — sira suresi', () => {
   });
 });
 
-describe('yerineOyna — sure dolunca', () => {
+describe('@kut/politika — sure dolunca yerine oynama', () => {
   it('cekmediyse desteden ceker (§4)', () => {
     const oyun = new OyunServisi(1);
     // Baslayan atinca sira gecer ve sonraki oyuncu cekme fazina duser.
@@ -147,20 +147,20 @@ describe('yerineOyna — sure dolunca', () => {
     oyun.uygula({ tip: 'AT', oyuncu: 0, tasId: tas.id, suAn: 0 });
 
     const siradaki = oyun.siradaki;
-    const aksiyon = atilacakTasSec(oyun.gorunum(siradaki), siradaki, 500);
+    const aksiyon = sureDolduAksiyonu(oyun.gorunum(siradaki), siradaki, 500);
     expect(aksiyon).toEqual({ tip: 'CEK_DESTEDEN', oyuncu: siradaki, suAn: 500 });
   });
 
   it('cektiyse tas atar', () => {
     const oyun = new OyunServisi(1);
-    const aksiyon = atilacakTasSec(oyun.gorunum(0), 0, 0);
+    const aksiyon = sureDolduAksiyonu(oyun.gorunum(0), 0, 0);
     expect(aksiyon).toMatchObject({ tip: 'AT', oyuncu: 0 });
   });
 
   it('sira baskasindaysa hicbir sey yapmaz', () => {
     const oyun = new OyunServisi(1);
     const digeri: OyuncuId = 2;
-    expect(atilacakTasSec(oyun.gorunum(digeri), digeri, 0)).toBeNull();
+    expect(sureDolduAksiyonu(oyun.gorunum(digeri), digeri, 0)).toBeNull();
   });
 
   it('secilen hamle motorca KABUL ediliyor — sira kilitlenmiyor', () => {
@@ -168,7 +168,7 @@ describe('yerineOyna — sure dolunca', () => {
     // Bir tur boyunca hep "yerine oyna" ile ilerlet; hicbiri reddedilmemeli.
     for (let adim = 0; adim < 30 && !oyun.bittiMi; adim++) {
       const koltuk = oyun.siradaki;
-      const aksiyon = atilacakTasSec(oyun.gorunum(koltuk), koltuk, adim * 10_000);
+      const aksiyon = sureDolduAksiyonu(oyun.gorunum(koltuk), koltuk, adim * 10_000);
       expect(aksiyon).not.toBeNull();
       const sonuc = oyun.uygula(aksiyon!);
       expect(sonuc.ok, `adim ${adim} reddedildi: ${sonuc.reason}`).toBe(true);

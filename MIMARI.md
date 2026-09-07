@@ -147,12 +147,12 @@ kaynağıdır. Ölçüp gerekirse sonra bakılır.
 
 Süre dolunca oyuncunun yerine oynanır — kurtarma **faza uygun** olmak
 zorunda: çekme fazında "at" demek motorca reddedilir ve sıra kilitlenir.
-Karar `soket/yerineOyna.ts`'te, saf ve testli.
+Karar `@kut/politika`da, saf ve testli.
 
-> **Not.** `apps/mobile/src/sure.ts` + `bot.ts` aynı işi tek oyunculu mod
-> için yapıyor. Bugün iki ayrı kopya; sunucu otorite olduğu için fark oyunu
-> bozmuyor ama ideal değil. İleride ortak bir `packages/politika` paketine
-> çıkarılmalı.
+> **Çözüldü.** Bu politika artık `packages/politika`da ve sunucu da aynı
+> kodu kullanıyor. Online masaya bot eklenince ikisinin ayrı kalması
+> imkânsızlaştı: sunucudaki botla çevrimdışı masadaki botun aynı oynaması
+> gerekiyor. `soket/yerineOyna.ts` kaldırıldı.
 
 Saat farkı için: sunucu her süre paketinde `sunucuZamani`'nı da gönderir,
 istemci farkı alıp ofsetini düzeltir. Ayrı bir `ping/pong` turu gerekmedi —
@@ -258,9 +258,36 @@ Yazılan koleksiyonlar (`packages/server/src/modeller/`):
 
 | Koleksiyon | Ne tutar |
 |---|---|
-| `oyuncular` | ad, `eposta`, `parolaOzeti`, `saglayicilar[]`, `cuzdan`, `ilerleme` |
-| `masalar` | kod, sahip, koltuklar, tur, maç puanları, `giris` (jeton) |
+| `oyuncular` | ad, `eposta`, `parolaOzeti`, `saglayicilar[]`, `arkadasKodu`, `cuzdan`, `ilerleme` |
+| `masalar` | kod, sahip, koltuklar (bot dahil), koltuk talepleri, tur, maç puanları |
 | `elKayitlari` | `tohum`, `baslayan`, `aksiyonlar[]`, `sonuc` |
+| `sikayetler` | şikâyet eden, edilen, sebep, o anki ad |
+| `arkadasliklar` | `kucuk`, `buyuk`, `isteyen`, `durum` |
+
+**Bot koltuğu.** `koltuklar[].bot` true ise o koltuğu sunucu oynuyor ve
+`oyuncu` alanı boştur. Oyun dört oyuncusuz ilerlemiyor (motor dört koltuk
+bekliyor) ama dördünün de insan olması gerekmiyor — iki arkadaş toplandıysa
+masayı doldurup oynayabilmeli. Botun kararı `@kut/politika`da, çevrimdışı
+masadaki yer tutucularla aynı kod; bu paket tam da bunun için ayrıldı
+(bkz. §6 notu).
+
+**Koltuk talepleri.** Boş koltuğa geçmek serbest, dolu koltuk oturanın
+onayından geçiyor. Kimin nerede oturduğu oyunu değiştirdiği için (attığın taşı
+sağındaki alır) bu, tercih edilebilir olmalıydı.
+
+**Arkadaşlık neden ayrı bir koleksiyon.** Engel listesi `oyuncular` içinde bir
+dizi ve orada doğru duruyor: engelleme **tek taraflı** bir karar. Arkadaşlık
+**iki taraflı** — bir istek var, bir de cevap. Bunu iki belgeye dağıtmak
+(A'nın gideni + B'nin geleni) aynı gerçeği iki yerde tutmak demek; biri yazılıp
+diğeri yazılamadığında istek tek tarafta asılı kalıyor.
+
+Çift, kimliklerin **metin sırasıyla normalleştiriliyor** (`kucuk` daima
+büyüğünden önce) ve `{kucuk, buyuk}` üstünde benzersiz indeks var. İstek başına
+belge tutmak yarış açıyordu: iki kişi aynı anda birbirine istek atarsa iki ayrı
+"bekliyor" kaydı oluşuyor, ikisi de karşı tarafın kabulünü bekliyordu. Şimdi
+ikinci yazma E11000 alıyor ve servis onu arkadaşlığa çeviriyor — ikisi de
+istiyorsa ayrıca onay istemek anlamsız. Testi `test/arkadas.test.ts`,
+`Promise.all` ile karşılıklı isteği zorluyor.
 
 `saglayicilar` bir **dizi**: misafir hesabı silinmeden üstüne Google/Apple
 eklenir, oyuncu ilerlemesini kaybetmez.

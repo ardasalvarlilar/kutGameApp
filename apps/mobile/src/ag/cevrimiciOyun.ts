@@ -51,6 +51,21 @@ export interface CevrimiciMasa {
   readonly acikMasalar: () => Promise<readonly AcikMasaOzeti[]>;
   readonly hazirOl: (hazir: boolean) => Promise<void>;
   readonly masadanCik: () => Promise<void>;
+
+  // --- Masa duzeni (yalnizca bekleme odasinda) -------------------------------
+  //
+  // Kimin nerede oturdugu oyunun kendisini degistiriyor: attigin tasi saginda
+  // oturan alir (KURALLAR.md §4) ve calma onceligi koltuk sirasindan cikiyor
+  // (§5). "Su kisinin sagina oturmak istemiyorum" gercek bir tercih.
+
+  /** Bos koltuklari botla doldurur. Yalnizca masayi acan. */
+  readonly botlariDoldur: () => Promise<void>;
+  readonly botuCikar: (koltuk: OyuncuId) => Promise<void>;
+  /** Bos bir koltuga gecer. */
+  readonly koltugaGec: (koltuk: OyuncuId) => Promise<void>;
+  /** Dolu bir koltuk icin degistirme talebi birakir. */
+  readonly koltukTalebi: (koltuk: OyuncuId) => Promise<void>;
+  readonly koltukCevap: (isteyenId: string, kabul: boolean) => Promise<void>;
 }
 
 /** Koltuk numarasindan ekranda gorunecek ad. */
@@ -64,7 +79,8 @@ function adlariCikar(masa: MasaGorunumu | null, ben: OyuncuId | null): Record<Oy
     // kalmayasin. Baglantisi kopani da isaretliyoruz, sunucu onun yerine
     // oynadigi icin ekranda "donmus" gorunmesin.
     const ad = koltuk.no === ben ? 'SEN' : koltuk.ad.toLocaleUpperCase('tr-TR');
-    adlar[koltuk.no] = koltuk.bagli ? ad : `${ad} (kopuk)`;
+    // Bot koltugunun baglantisi kopmaz; "(kopuk)" yazmanin anlami yok.
+    adlar[koltuk.no] = koltuk.bot || koltuk.bagli ? ad : `${ad} (kopuk)`;
   }
   return adlar;
 }
@@ -230,6 +246,25 @@ export function useCevrimiciMasa(soket: Socket | null, bagli: boolean): Cevrimic
     [istek],
   );
 
+  const botlariDoldur = useCallback(async (): Promise<void> => istek('masa:botDoldur'), [istek]);
+  const botuCikar = useCallback(
+    async (koltuk: OyuncuId): Promise<void> => istek('masa:botCikar', { koltuk }),
+    [istek],
+  );
+  const koltugaGec = useCallback(
+    async (koltuk: OyuncuId): Promise<void> => istek('masa:koltugaGec', { koltuk }),
+    [istek],
+  );
+  const koltukTalebi = useCallback(
+    async (koltuk: OyuncuId): Promise<void> => istek('masa:koltukTalebi', { koltuk }),
+    [istek],
+  );
+  const koltukCevap = useCallback(
+    async (isteyenId: string, kabul: boolean): Promise<void> =>
+      istek('masa:koltukCevap', { isteyenId, kabul }),
+    [istek],
+  );
+
   const masadanCik = useCallback(async (): Promise<void> => {
     await istek('masa:cik');
     setMasa(null);
@@ -298,5 +333,10 @@ export function useCevrimiciMasa(soket: Socket | null, bagli: boolean): Cevrimic
     acikMasalar,
     hazirOl,
     masadanCik,
+    botlariDoldur,
+    botuCikar,
+    koltugaGec,
+    koltukTalebi,
+    koltukCevap,
   };
 }

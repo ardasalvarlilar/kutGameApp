@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { normalTas, okeyTas, seriMu, type Renk, type Sayi, type Tas } from '@kut/engine';
-import { kutDiz, seriDiz, type Grup } from './dizme';
+import { kutDiz, seriDiz, type Grup } from '../src/dizme';
 
 const t = (renk: Renk, sayi: Sayi, kopya: 'a' | 'b' = 'a'): Tas => normalTas(renk, sayi, kopya);
 const ok = (kopya: 'a' | 'b' = 'a'): Tas => okeyTas(kopya);

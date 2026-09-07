@@ -7,8 +7,7 @@
 // Saf tutuldu — durum degistirmiyor, gecerlilik karari yine motorun.
 
 import type { OkeyFirsati, OyuncuGorunumu, TasId } from '@kut/engine';
-import { acilisBul } from './bot';
-import { gruplariKimlige } from './dizme';
+import { acilisBul, gruplariKimlige } from '@kut/politika';
 
 /**
  * Kullanilacak firsati secer: secili taslarla ortusen varsa o, yoksa ilki.

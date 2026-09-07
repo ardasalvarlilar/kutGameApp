@@ -14,6 +14,16 @@
 
 import { Schema, model, type InferSchemaType, type Model } from 'mongoose';
 
+const kayitKoltuguSemasi = new Schema(
+  {
+    no: { type: Number, required: true, min: 0, max: 3 },
+    /** Bot koltugunda yok. */
+    oyuncu: { type: Schema.Types.ObjectId, ref: 'Oyuncu' },
+    bot: { type: Boolean, required: true, default: false },
+  },
+  { _id: false },
+);
+
 const elKaydiSemasi = new Schema(
   {
     masa: { type: Schema.Types.ObjectId, ref: 'Masa', required: true, index: true },
@@ -23,8 +33,16 @@ const elKaydiSemasi = new Schema(
     tohum: { type: Number, required: true },
     /** Eli baslatan koltuk. */
     baslayan: { type: Number, required: true, min: 0, max: 3 },
-    /** Koltuk sirasina gore oyuncular; kayit sonradan okunacaksa gerekli. */
-    oturanlar: { type: [Schema.Types.ObjectId], ref: 'Oyuncu', required: true },
+    /**
+     * Koltuk sirasina gore oturanlar.
+     *
+     * Duz bir `ObjectId` dizisiydi; masaya BOT oturabildigi icin alt belgeye
+     * cevrildi — bot koltugunda `oyuncu` yok ve bunu bir dizide `null` ile
+     * anlatmak, koltuk sirasini okunmaz yapardi. Bu koleksiyonu kod yalnizca
+     * YAZIYOR (elle inceleme icin duruyor), o yuzden gocmen gerekmedi; eski
+     * kayitlar eski sekliyle duruyor.
+     */
+    oturanlar: { type: [kayitKoltuguSemasi], required: true },
 
     /** Motora gonderilen aksiyonlar, sirasiyla. */
     aksiyonlar: { type: [Schema.Types.Mixed], required: true, default: [] },

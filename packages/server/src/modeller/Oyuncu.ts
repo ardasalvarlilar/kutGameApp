@@ -105,6 +105,21 @@ const oyuncuSemasi = new Schema(
     /** Misafirken hesap acilirsa false'a doner; istemci "hesabin var" der. */
     misafirMi: { type: Boolean, required: true, default: true },
 
+    /**
+     * ARKADAS KODU — "KUT-7F3A9" gibi. Baskasinin seni bulmasinin yolu bu.
+     *
+     * Neden ad ya da e-posta ile aranmiyor:
+     *  - Gorunen ad benzersiz DEGIL; "Ahmet" yazan on kisi cikiyor ve
+     *    hangisinin arkadasin oldugunu ayirt etmenin yolu yok.
+     *  - E-posta ile aramak, girilen adresin kayitli olup olmadigini
+     *    sizdirir; adres toplamanin en kolay yolu olurdu.
+     *
+     * Kod paylasmak iradi bir hareket: kodu veren zaten bulunmak istiyor.
+     * Alan `sparse` cunku eski belgelerde yok; ilk istendiginde uretiliyor
+     * (servisler/arkadasServisi.ts).
+     */
+    arkadasKodu: { type: String },
+
     saglayicilar: { type: [saglayiciSemasi], required: true, default: [] },
 
     // --- Jeton ekonomisi (MVP'de kullanilmiyor, bkz. MIMARI.md) --------------
@@ -141,6 +156,10 @@ oyuncuSemasi.index(
   { 'saglayicilar.tip': 1, 'saglayicilar.disKimlik': 1 },
   { unique: true, sparse: true },
 );
+
+// Arkadas kodu benzersiz. `sparse`: kodu henuz uretilmemis belgeler var ve
+// null'lar birbiriyle carpismamali.
+oyuncuSemasi.index({ arkadasKodu: 1 }, { unique: true, sparse: true });
 
 // E-posta bir kez kayit olabilir. `partialFilterExpression` sart: misafir
 // hesaplarinda alan YOK, `sparse` cok belgede null'a izin verse de kismi

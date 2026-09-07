@@ -3,7 +3,8 @@
 // Uygulamanin butun akisi tek bir yerde duruyor:
 //
 //   yukleniyor → giris → lobi → bekleme odasi → masa → (lobi)
-//                          ├→ hesap
+//                          ├→ profil (hesap · arkadaslar · ayarlar)
+//                          ├→ masa bul
 //                          └→ alistirma (cevrimdisi masa)
 //
 // Karar veren iki sey var: oturum (`useKimlik`) ve masa (`useCevrimiciMasa`).
@@ -15,8 +16,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, SafeAreaView, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { Bekleme } from './bilesenler/Bekleme';
 import { Giris } from './bilesenler/Giris';
-import { Hesap } from './bilesenler/Hesap';
 import { Lobi } from './bilesenler/Lobi';
+import { Profil } from './bilesenler/Profil';
 import { MasaBul } from './bilesenler/MasaBul';
 import type { MasadakiOyuncu } from './bilesenler/Ayarlar';
 import { Masa } from './Masa';
@@ -27,7 +28,7 @@ import type { SikayetSebebi } from './ag/api';
 import { renkler } from './tema';
 
 /** Lobiden acilan yan ekranlar. */
-type YanEkran = 'yok' | 'hesap' | 'alistirma' | 'masaBul';
+type YanEkran = 'yok' | 'profil' | 'alistirma' | 'masaBul';
 
 function Perde({ yazi }: { readonly yazi: string }) {
   return (
@@ -60,7 +61,7 @@ export function Uygulama() {
   // Oturum degisince yan ekrani kapat.
   //
   // Olmazsa: hesabini silen oyuncu giris ekranina duser ama `yanEkran` hala
-  // 'hesap' kalir; yeni bir hesap acar acmaz kendini yine hesap ekraninda
+  // 'profil' kalir; yeni bir hesap acar acmaz kendini yine profil ekraninda
   // bulur. Ayni sey cikis yapip baska hesapla girende de oluyordu.
   useEffect(() => {
     setYanEkran('yok');
@@ -151,6 +152,11 @@ export function Uygulama() {
           hata={oda.hata}
           onHazir={(hazir) => void oda.hazirOl(hazir)}
           onCik={() => void oda.masadanCik()}
+          onKoltugaGec={(koltuk) => void oda.koltugaGec(koltuk)}
+          onKoltukTalebi={(koltuk) => void oda.koltukTalebi(koltuk)}
+          onKoltukCevap={(isteyenId, kabul) => void oda.koltukCevap(isteyenId, kabul)}
+          onBotlariDoldur={() => void oda.botlariDoldur()}
+          onBotuCikar={(koltuk) => void oda.botuCikar(koltuk)}
         />
       </SafeAreaView>
     );
@@ -162,11 +168,17 @@ export function Uygulama() {
     return <AlistirmaMasasi onCik={() => setYanEkran('yok')} />;
   }
 
-  if (yanEkran === 'hesap') {
+  // PROFIL. Arkadas listesindeki "KATIL" da buradan geciyor: masaya oturmayi
+  // basarirsa `oda.masa` dolar ve yukaridaki dallardan biri devralir, bu
+  // yuzden ekrani ayrica kapatmaya gerek yok.
+  if (yanEkran === 'profil') {
     return (
       <SafeAreaView style={stil.ekran}>
         <StatusBar hidden />
-        <Hesap onKapat={() => setYanEkran('yok')} />
+        <Profil
+          onKapat={() => setYanEkran('yok')}
+          onMasayaKatil={(kod) => void oda.masayaKatil(kod)}
+        />
       </SafeAreaView>
     );
   }
@@ -202,7 +214,8 @@ export function Uygulama() {
         onMasaAc={() => void oda.masaKur(true)}
         onKatil={(kod) => void oda.masayaKatil(kod)}
         onAlistirma={() => setYanEkran('alistirma')}
-        onHesap={() => setYanEkran('hesap')}
+        onProfil={() => setYanEkran('profil')}
+        arkadaslar={kimlik.arkadaslar}
       />
     </SafeAreaView>
   );

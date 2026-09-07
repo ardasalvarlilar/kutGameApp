@@ -20,6 +20,7 @@ import { z } from 'zod';
 import { config } from '../config.js';
 import { Oyuncu, type OyuncuBelgesi } from '../modeller/Oyuncu.js';
 import { AD_SORUN_METINLERI, adSorunu } from './adFiltresi.js';
+import { iliskileriTemizle } from './arkadasServisi.js';
 import { hesapSilindiBildir, parolaKoduGonder } from './postaServisi.js';
 
 /** bcrypt tur sayisi. 10 mobil girislerde ~60ms; daha yuksegi girisi yavaslatir. */
@@ -129,6 +130,8 @@ export function oyuncuOzeti(oyuncu: OyuncuBelgesi & { _id: unknown }) {
     ad: oyuncu.ad,
     eposta: oyuncu.eposta ?? null,
     misafirMi: oyuncu.misafirMi,
+    // Tembel uretiliyor (servisler/arkadasServisi.ts); henuz yoksa null.
+    arkadasKodu: oyuncu.arkadasKodu ?? null,
     seviye: oyuncu.ilerleme.seviye,
     jeton: oyuncu.cuzdan.jeton,
     oynananEl: oyuncu.ilerleme.oynananEl,
@@ -357,6 +360,54 @@ export async function parolayiSifirla(girdi: ParolaSifirla): Promise<GirisSonucu
   return { jeton: jetonUret(String(oyuncu._id)), oyuncu };
 }
 
+// --- Parola degistirme -------------------------------------------------------
+
+export const parolaDegistirSemasi = z.object({
+  mevcutParola: z.string().min(1).max(72),
+  yeniParola: parolaSemasi,
+});
+
+export type ParolaDegistir = z.infer<typeof parolaDegistirSemasi>;
+
+/**
+ * Oturumu acik oyuncunun parolasini degistirir.
+ *
+ * MEVCUT PAROLA SORULUYOR ve bu isteğe bagli degil: jeton 30 gun gecerli ve
+ * cihazda duruyor. Telefonu bir sure eline gecirenin parolayi degistirip
+ * hesabi kalicilastirmasi, sifirlama e-postasinin gitmedigi tek senaryo
+ * olurdu — sahibinin haberi bile olmazdi.
+ *
+ * Parolasi olmayan (misafir) hesapta degistirilecek bir sey yok; oyuncu once
+ * hesap acmali.
+ */
+export async function parolayiDegistir(
+  oyuncuId: string,
+  girdi: ParolaDegistir,
+): Promise<GirisSonucu> {
+  const oyuncu = await Oyuncu.findById(oyuncuId).select('+parolaOzeti');
+  if (oyuncu === null) throw new KimlikHatasi('Oyuncu bulunamadı');
+  if (typeof oyuncu.parolaOzeti !== 'string') {
+    throw new KimlikHatasi('Bu hesabın parolası yok — önce e-postayla hesap aç');
+  }
+
+  const uyuyor = await bcrypt.compare(girdi.mevcutParola, oyuncu.parolaOzeti);
+  if (!uyuyor) throw new KimlikHatasi('Mevcut parolan hatalı');
+  if (girdi.mevcutParola === girdi.yeniParola) {
+    throw new KimlikHatasi('Yeni parola eskisiyle aynı olamaz');
+  }
+
+  oyuncu.parolaOzeti = await bcrypt.hash(girdi.yeniParola, BCRYPT_TURU);
+  // Bekleyen bir sifirlama kodu varsa dussun: parola degistiyse o kod artik
+  // sahibinin bilmedigi bir yedek anahtar.
+  oyuncu.set('parolaSifirlama', undefined);
+  oyuncu.sonGorulme = new Date();
+  await oyuncu.save();
+
+  // Yeni jeton: eskisi de gecerli kalir (JWT iptal edilemiyor), ama istemci
+  // her basarili kimlik isleminden sonra tazesini bekliyor.
+  return { jeton: jetonUret(String(oyuncu._id)), oyuncu };
+}
+
 // --- Hesap silme -------------------------------------------------------------
 
 /**
@@ -365,6 +416,8 @@ export async function parolayiSifirla(girdi: ParolaSifirla): Promise<GirisSonucu
  * App Store Review Guideline 5.1.1(v): hesap acilmasina izin veren her
  * uygulama, hesabin uygulama ICINDEN silinmesine de izin vermek zorunda.
  * "Bize e-posta at" yetmiyor, denetimde ret sebebi.
+ *
+ * Arkadasliklar (modeller/Arkadaslik.ts) siliniyor; el kayitlari degil.
  *
  * El kayitlari (modeller/ElKaydi.ts) SILINMIYOR: icinde kisisel veri yok,
  * yalnizca oynanmis tas dizisi ve artik hicbir belgeye cozulmeyen bir kimlik.
@@ -380,6 +433,9 @@ export async function hesabiSil(oyuncuId: string): Promise<void> {
   await Oyuncu.deleteOne({ _id: oyuncu._id });
   // Baskalarinin engelli listesinde asili kalmasin.
   await Oyuncu.updateMany({ engellenenler: oyuncu._id }, { $pull: { engellenenler: oyuncu._id } });
+  // Arkadasliklar da gitsin: kalirsa karsi tarafin listesinde adi
+  // cozulemeyen bir kayit durur ve kotasindan yer kaplar.
+  await iliskileriTemizle(String(oyuncu._id));
 
   if (eposta !== null) await hesapSilindiBildir(eposta, ad);
 }

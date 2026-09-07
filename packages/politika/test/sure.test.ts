@@ -21,7 +21,7 @@ import {
   siraBitisAni,
   sonrakiKademe,
   sureDolduAksiyonu,
-} from './sure';
+} from '../src/sure';
 
 const t = (renk: Renk, sayi: Sayi, kopya: 'a' | 'b' = 'a'): Tas => normalTas(renk, sayi, kopya);
 const ok = (kopya: 'a' | 'b' = 'a'): Tas => okeyTas(kopya);
@@ -55,6 +55,7 @@ function gorunumKur(p: {
     islemeYapabilirim: false,
     okeyFirsatlarim: [],
     pencere: null,
+    sonCalan: null,
     sonuc: null,
   };
 }

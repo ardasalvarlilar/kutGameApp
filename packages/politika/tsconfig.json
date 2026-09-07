@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    // Motorunki gibi `types: []`: politika da saf kalmali. Node ya da DOM
+    // API'si kullanan bir satir girerse derleme kirilir (CLAUDE.md #1).
+    //
+    // `rootDir` YOK: `@kut/engine` depo icinden, bu klasorun disindan
+    // geliyor. Motorun tsconfig'i onu koyabiliyor cunku disaridan hicbir sey
+    // almiyor.
+    "types": []
+  },
+  "include": ["src/**/*.ts"]
+}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { elBaslat } from '../src/durum';
-import { kalanPencereSuresi, viewFor } from '../src/gorunum';
+import { viewFor } from '../src/gorunum';
 import { reduce } from '../src/reduce';
 import { OYUNCULAR } from '../src/tipler';
 import { dolgu, durumAl, durumKur, pencereKur, t, yerPeri } from './yardimci';
@@ -113,27 +113,16 @@ describe('talep gorunurlugu — KURALLAR.md §5', () => {
     expect(viewFor(talepliDurum({ talepGorunurlugu: false }), 1).pencere?.talepler).toEqual([]);
   });
 
-  it('pencerenin kapanis zamani istemciye bildirilir', () => {
-    const gorunum = viewFor(talepliDurum(), 1);
-    expect(gorunum.pencere?.kapanisZamani).toBe(3000);
-  });
-});
-
-describe('kalan pencere suresi', () => {
-  const atilan = t('kirmizi', 9);
-  const durum = durumKur({ pencere: pencereKur(0, atilan, { acilisZamani: 1000 }) });
-
-  it('sure geri sayar', () => {
-    expect(kalanPencereSuresi(durum, 1000)).toBe(3000);
-    expect(kalanPencereSuresi(durum, 2500)).toBe(1500);
-  });
-
-  it('kapandiktan sonra sifirdir', () => {
-    expect(kalanPencereSuresi(durum, 9999)).toBe(0);
-  });
-
-  it('pencere yoksa sifirdir', () => {
-    expect(kalanPencereSuresi(durumKur(), 0)).toBe(0);
+  it('pencerede geri sayim yoktur — §9 0.9', () => {
+    // Sayac kalkti; ekranda gosterilen sey sure degil, taleplerin kendisi.
+    const pencere = viewFor(talepliDurum(), 1).pencere;
+    expect(pencere).not.toBeNull();
+    expect(Object.keys(pencere as object).sort()).toEqual([
+      'atan',
+      'ciftHakkim',
+      'talepler',
+      'tasId',
+    ]);
   });
 });
 

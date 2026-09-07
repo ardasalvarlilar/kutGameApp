@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { normalTas, okeyTas, reduce, type Renk, type Sayi, type Tas } from '@kut/engine';
+import {
+  desteOlustur,
+  karistir,
+  kutMu,
+  normalTas,
+  okeyTas,
+  reduce,
+  rngOlustur,
+  seriMu,
+  type Renk,
+  type Sayi,
+  type Tas,
+} from '@kut/engine';
 import { bitirenTaslar, eldenBitmeCozumu, perlereBol } from './eldenBitme';
 
 const t = (renk: Renk, sayi: Sayi, kopya: 'a' | 'b' = 'a'): Tas => normalTas(renk, sayi, kopya);
@@ -140,7 +152,7 @@ describe('motor cozumu kabul ediyor', () => {
 
     const bosKayit = { 0: [] as readonly Tas[], 1: [], 2: [], 3: [] };
     const durum = {
-      ayarlar: { talepPenceresiMs: 3000, siraSureleriMs: [30000], islerTasCezasi: 50,
+      ayarlar: { siraSureleriMs: [30000], islerTasCezasi: 50,
         talepGorunurlugu: true, ciftCalmaHakki: true, kazananCalmaCezasiOder: true,
         desteTukendigindeKazananVar: false, desteTukendigindeCalmaCezasi: true,
         tur16AcamadiCarpani: true, tur16OkeyleBitmeCarpani: true },
@@ -152,7 +164,8 @@ describe('motor cozumu kabul ediyor', () => {
       hamleSayisi: { 0: 0, 1: 0, 2: 0, 3: 0 },
       calinanSayisi: { 0: 0, 1: 0, 2: 0, 3: 0 },
       islerTasSayisi: { 0: 0, 1: 0, 2: 0, 3: 0 },
-      pencere: null, sonuc: null,
+      pencere: null,
+    sonCalan: null, sonuc: null,
     };
 
     const sonuc = reduce(durum as never, {
@@ -164,5 +177,125 @@ describe('motor cozumu kabul ediyor', () => {
     expect(sonuc.state.faz).toBe('el-bitti');
     expect(sonuc.state.sonuc?.kazanan).toBe(0);
     expect(sonuc.state.sonuc?.puanlar[0]).toBe(-100);
+  });
+});
+
+// --- Budamanin dogrulugu ve hizi ---------------------------------------------
+//
+// `perlereBol` aday perleri iki dar havuzdan kuruyor (ayni sayi / ayni renk).
+// Bu bir HIZLANDIRMA; sonucu degistirmemeli. Asagidaki test onu KANITLIYOR:
+// eski, hicbir sey budamayan surumle rastgele ellerde karsilastiriyor.
+
+/** Referans surum: her adimda kalan taslarin BUTUN alt kumelerini dener. */
+function kabaKuvvetBolunurMu(taslar: readonly Tas[]): boolean {
+  if (taslar.length === 0) return true;
+  if (taslar.length < 3) return false;
+
+  const ilk = taslar[0]!;
+  const geri = taslar.slice(1);
+
+  for (let boy = 3; boy <= Math.min(13, taslar.length); boy++) {
+    const secilen: Tas[] = [];
+    const gez = (bas: number): boolean => {
+      if (secilen.length === boy - 1) {
+        const aday = [ilk, ...secilen];
+        if (!(kutMu(aday).ok || seriMu(aday).ok)) return false;
+        const idler = new Set(aday.map((tas) => tas.id));
+        return kabaKuvvetBolunurMu(taslar.filter((tas) => !idler.has(tas.id)));
+      }
+      for (let i = bas; i < geri.length; i++) {
+        secilen.push(geri[i]!);
+        const bulundu = gez(i + 1);
+        secilen.pop();
+        if (bulundu) return true;
+      }
+      return false;
+    };
+    if (gez(0)) return true;
+  }
+  return false;
+}
+
+describe('budama sonucu degistirmiyor', () => {
+  /**
+   * Dar bir desteden el dagitir: iki renk, 1–6 arasi sayilar.
+   * Tam desteden cekilen rastgele 6–9 tas neredeyse hicbir zaman perlere
+   * bolunmuyor; dar deste iki cevabi da bol bol uretiyor, yani test
+   * gercekten karsilastirma yapiyor.
+   */
+  function darEl(tohum: number, boy: number): readonly Tas[] {
+    const havuz: Tas[] = [];
+    for (const renk of ['kirmizi', 'mavi'] as const) {
+      for (const sayi of [1, 2, 3, 4, 5, 6] as const) {
+        havuz.push(t(renk, sayi, 'a'), t(renk, sayi, 'b'));
+      }
+    }
+    havuz.push(ok('a'), ok('b'));
+    return karistir(havuz, rngOlustur(tohum)).slice(0, boy);
+  }
+
+  it('rastgele ellerde kaba kuvvetle ayni cevabi veriyor', () => {
+    let farkli = 0;
+    let bolunen = 0;
+
+    for (let deneme = 0; deneme < 300; deneme++) {
+      // Kucuk eller: kaba kuvvet surumu 10 tastan sonra dakikalar suruyor.
+      const boy = 3 + (deneme % 7);
+      const el = darEl(deneme * 7919 + 13, boy);
+
+      const hizli = perlereBol(el) !== null;
+      const kaba = kabaKuvvetBolunurMu(el);
+      if (hizli !== kaba) farkli++;
+      if (kaba) bolunen++;
+    }
+
+    expect(farkli).toBe(0);
+    // Testin bir sey olctugunun kaniti: "hepsi null" diyen bozuk bir surum
+    // de farkli === 0 verirdi. 300 elin ~16'si bolunuyor; asil deger
+    // bolunmeyenlerde, cunku budamanin gecerli bir peri elemesi orada
+    // gorunurdu.
+    expect(bolunen).toBeGreaterThan(10);
+  });
+
+  it('bulunan bolme gercekten gecerli ve butun taslari kapsiyor', () => {
+    const deste = [...desteOlustur()];
+    let bulunan = 0;
+
+    for (let deneme = 0; deneme < 300; deneme++) {
+      const el = [
+        ...karistir(deste, rngOlustur(deneme * 104729 + 7)).slice(0, 14),
+      ];
+      const bolme = perlereBol(el) ?? perlereBol(darEl(deneme * 31 + 5, 9));
+      if (bolme === null) continue;
+      bulunan++;
+
+      expect(new Set(bolme.flat().map((tas) => tas.id)).size).toBe(bolme.flat().length);
+      for (const per of bolme) expect(kutMu(per).ok || seriMu(per).ok).toBe(true);
+    }
+    expect(bulunan).toBeGreaterThan(0);
+  });
+});
+
+describe('tur 16 arama suresi — donmanin kaynagiydi', () => {
+  // Bolunmeyen el en pahali durum: arama agacinin tamami geziliyor. Calma
+  // (KURALLAR.md §5) eli 20+ tasa cikarabildigi icin sinir orada.
+  const bolunmeyen20: readonly Tas[] = [
+    t('kirmizi', 1), t('kirmizi', 3), t('kirmizi', 5), t('kirmizi', 7),
+    t('siyah', 2), t('siyah', 4), t('siyah', 6), t('siyah', 9),
+    t('mavi', 1), t('mavi', 4), t('mavi', 8), t('mavi', 11),
+    t('sari', 2), t('sari', 5), t('sari', 13),
+    t('kirmizi', 10), t('siyah', 12), t('mavi', 6), t('sari', 9), ok(),
+  ];
+
+  it('20 taslik bolunmeyen el 250 ms altinda taraniyor', () => {
+    expect(perlereBol(bolunmeyen20)).toBeNull();
+
+    const bas = performance.now();
+    bitirenTaslar(bolunmeyen20);
+    const gecen = performance.now() - bas;
+
+    // Budamadan onceki olcum ayni makinede 3679 ms idi. Esik telefonu da
+    // kapsayacak kadar genis; amac sinirin yeniden asilmasini yakalamak.
+    expect(gecen).toBeLessThan(250);
   });
 });

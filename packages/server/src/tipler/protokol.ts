@@ -10,11 +10,25 @@ import type { Aksiyon, ElSonucu, HataKodu, OyuncuGorunumu, OyuncuId } from '@kut
 /** Masadaki bir koltuk — herkese acik bilgi. */
 export interface KoltukGorunumu {
   readonly no: OyuncuId;
+  /** Bot koltugunda gercek bir oyuncu kimligi degil, `bot:<koltuk>` gelir. */
   readonly oyuncuId: string;
   readonly ad: string;
+  /** Bu koltugu sunucunun botu mu oynuyor? */
+  readonly bot: boolean;
   readonly hazir: boolean;
   /** Soketi acik mi? Kopan oyuncunun koltugu bosalmaz (bkz. MIMARI.md §3). */
   readonly bagli: boolean;
+}
+
+/**
+ * Bekleyen koltuk degistirme talebi.
+ *
+ * Dolu bir koltuga gecmek oturanin onayindan geciyor: kimin nerede oturdugu
+ * oyunun kendisini degistiriyor (attigin tasi saginda oturan alir, §4/§5).
+ */
+export interface KoltukTalebiGorunumu {
+  readonly isteyenId: string;
+  readonly hedefKoltuk: OyuncuId;
 }
 
 export interface MasaGorunumu {
@@ -26,6 +40,7 @@ export interface MasaGorunumu {
   /** Kod bilmeden katilinabilir mi? Hizli eslesmede acilan masalar acik. */
   readonly ozel: boolean;
   readonly koltuklar: readonly KoltukGorunumu[];
+  readonly koltukTalepleri: readonly KoltukTalebiGorunumu[];
   /** Mac boyu birikmis puanlar; anahtar koltuk numarasi. */
   readonly puanlar: Readonly<Record<number, number>>;
 }
@@ -89,6 +104,34 @@ export interface IstemciOlaylari {
   'masa:cik': (girdi: Record<string, never>, yanit: (sonuc: Yanit<null>) => void) => void;
   'masa:hazir': (
     girdi: { readonly hazir: boolean },
+    yanit: (sonuc: Yanit<{ masa: MasaGorunumu }>) => void,
+  ) => void;
+
+  // --- Masa duzeni (yalnizca `bekliyor` durumunda) --------------------------
+
+  /** Bos koltuklari botla doldurur. Yalnizca masayi acan. */
+  'masa:botDoldur': (
+    girdi: Record<string, never>,
+    yanit: (sonuc: Yanit<{ masa: MasaGorunumu }>) => void,
+  ) => void;
+  /** Bir bot koltugunu bosaltir — yeri insana acilsin diye. */
+  'masa:botCikar': (
+    girdi: { readonly koltuk: number },
+    yanit: (sonuc: Yanit<{ masa: MasaGorunumu }>) => void,
+  ) => void;
+  /** Bos bir koltuga gecer. */
+  'masa:koltugaGec': (
+    girdi: { readonly koltuk: number },
+    yanit: (sonuc: Yanit<{ masa: MasaGorunumu }>) => void,
+  ) => void;
+  /** Dolu bir koltuk icin degistirme talebi birakir. */
+  'masa:koltukTalebi': (
+    girdi: { readonly koltuk: number },
+    yanit: (sonuc: Yanit<{ masa: MasaGorunumu }>) => void,
+  ) => void;
+  /** Gelen koltuk talebini kabul eder ya da reddeder. */
+  'masa:koltukCevap': (
+    girdi: { readonly isteyenId: string; readonly kabul: boolean },
     yanit: (sonuc: Yanit<{ masa: MasaGorunumu }>) => void,
   ) => void;
   /**

@@ -27,18 +27,24 @@ export interface AtikGorunumu {
   readonly adet: number;
 }
 
+/**
+ * Acik talep penceresi (§5). SAYAC YOKTUR (§9 0.9): pencere, sirasi gelen
+ * oyuncu hamlesini yapana kadar acik kalir. Ekranda bu yuzden geri sayim
+ * degil, kimin talep ettigi gosterilir.
+ */
 export interface PencereGorunumu {
   readonly atan: OyuncuId;
   readonly tasId: TasId;
-  readonly acilisZamani: number;
-  /** Bu andan sonra sirasi gelen oyuncu desteden cekebilir (§5.2). */
-  readonly kapanisZamani: number;
   readonly talepler: readonly OyuncuId[];
-  readonly ciftTalebi: OyuncuId | null;
   /**
-   * Bu oyuncu "cifti bende" diyebilir mi? Tur 15'te ve yalnizca atilan tasin
-   * birebir esi gercekten istakasindaysa true. Istemcideki tusu bu belirler;
-   * asil kontrol yine sunucuda yapilir.
+   * Bu oyuncu "cifti bende" diyebilir mi?
+   *
+   * Uc sart birden (§5, §9 0.10): tur 15 olacak, atilan tasin BIREBIR ESI
+   * gercekten istakasinda olacak ve oyuncu HENUZ ACMAMIS olacak.
+   *
+   * Es sarti bir kullanici kolayligi degil, kuralin kendisi: elinde olmayan
+   * bir tasi "cifti bende" diye almak, isine yarayan her tasi bedavaya
+   * toplamak olurdu. Asil kontrol yine motorda (`cift-elinde-yok`).
    */
   readonly ciftHakkim: boolean;
 }
@@ -104,6 +110,11 @@ export interface OyuncuGorunumu {
    */
   readonly okeyFirsatlarim: readonly OkeyFirsati[];
   readonly pencere: PencereGorunumu | null;
+  /**
+   * Masadaki tasi en son kim caldi? Kural karari degil, ekran icin: atik
+   * obeginden eksilen tasin kime gittigini gostermeye yariyor.
+   */
+  readonly sonCalan: OyuncuId | null;
   readonly sonuc: ElSonucu | null;
 }
 
@@ -158,22 +169,19 @@ export function viewFor(durum: OyunDurumu, oyuncu: OyuncuId): OyuncuGorunumu {
       durum.ayarlar.ciftCalmaHakki &&
       oyuncu !== pencere.atan &&
       oyuncu !== durum.siradaki &&
+      // §9 0.10 — dort cifti indirdikten sonra ciftle isin bitiyor.
+      !durum.acmisMi[oyuncu] &&
+      // Ceza tasi odenmeden calinamaz (§5).
+      durum.deste.length > 0 &&
       ustTas !== undefined &&
       durum.istakalar[oyuncu].some((tas) => birebirEsMi(tas, ustTas));
 
     pencereGorunumu = {
       atan: pencere.atan,
       tasId: pencere.tasId,
-      acilisZamani: pencere.acilisZamani,
-      kapanisZamani: pencere.acilisZamani + durum.ayarlar.talepPenceresiMs,
       talepler: hepsiniGorur
         ? pencere.talepler
         : pencere.talepler.filter((talep) => talep === oyuncu),
-      ciftTalebi: hepsiniGorur
-        ? pencere.ciftTalebi
-        : pencere.ciftTalebi === oyuncu
-          ? oyuncu
-          : null,
       ciftHakkim,
     };
   }
@@ -201,13 +209,7 @@ export function viewFor(durum: OyunDurumu, oyuncu: OyuncuId): OyuncuGorunumu {
     islemeYapabilirim: durum.acmisMi[oyuncu] && birTurDonduMu(durum, oyuncu),
     okeyFirsatlarim: okeyFirsatlari(durum, oyuncu),
     pencere: pencereGorunumu,
+    sonCalan: durum.sonCalan,
     sonuc: durum.sonuc,
   };
-}
-
-/** Pencerenin kapanmasina kalan sure (ms). Kapandiysa 0. */
-export function kalanPencereSuresi(durum: OyunDurumu, suAn: number): number {
-  if (durum.pencere === null) return 0;
-  const kapanis = durum.pencere.acilisZamani + durum.ayarlar.talepPenceresiMs;
-  return Math.max(0, kapanis - suAn);
 }

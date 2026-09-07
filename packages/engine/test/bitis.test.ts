@@ -176,7 +176,7 @@ describe('tur 16 — elden bitme, KURALLAR.md §3', () => {
       },
       atikYiginlari: { 0: [calinacak] },
       deste: dolgu(6, [calinacak], 55),
-      pencere: { atan: 0, tasId: calinacak.id, acilisZamani: 0, talepler: [], ciftTalebi: null },
+      pencere: { atan: 0, tasId: calinacak.id, talepler: [] },
     });
     const talep = durumAl(reduce(durum, { tip: 'CALMA_TALEBI', oyuncu: 2, suAn: 100 }));
     const sonra = durumAl(reduce(talep, { tip: 'CEK_DESTEDEN', oyuncu: 3, suAn: 5000 }));

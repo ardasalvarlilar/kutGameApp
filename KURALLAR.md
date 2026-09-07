@@ -1,6 +1,6 @@
 # Küt — Kural Spesifikasyonu
 
-> Sürüm 0.7. Kural motoru **yalnızca** bu dokümandan yazılır.
+> Sürüm 0.10. Kural motoru **yalnızca** bu dokümandan yazılır.
 > Burada yazmayan kural oyunda yoktur. Belirsiz bir nokta varsa
 > tahmin etme — "Karara bağlananlar" bölümüne bak, orada da yoksa sor.
 >
@@ -8,7 +8,9 @@
 > 0.3'te dönüş yönü saat yönüne çevrildi, işler taş cezası ve kütteki okeyi
 > alma şartı eklendi. 0.4'te sıra süresi geldi, 0.5'te eli bitiren atış
 > işler taş cezasından muaf tutuldu, 0.6'da okeyin yerine geçen taş işler
-> sayıldı, 0.7'de süre kademesi el sonunda sıfırlandı (bkz. §9).
+> sayıldı, 0.7'de süre kademesi el sonunda sıfırlandı, 0.8'de yerdeki okeyin
+> yeri sabitlendi, 0.9'da talep penceresinin süresi kaldırıldı, **0.10'da
+> "çifti bende" anında sonuçlanan bir hamleye çevrildi** (bkz. §9).
 
 Küt, halk arasında **Americano** olarak da bilinen oyunun okey taşlarıyla
 oynanan hâlidir. 101'e benzer ama her turun kendi açılış şartı vardır.
@@ -167,13 +169,22 @@ Koltuk sırası deterministiktir, ağ gecikmesinden etkilenmez.
 
 ### Talep penceresi
 
+Pencerenin **süresi yoktur** (0.9 ile karara bağlandı). Sırası gelen oyuncu
+hamlesini yapana kadar açık kalır; onun hamlesi pencereyi kapatır.
+
 1. Taş atılır, pencere açılır. 3 ve 4 numaralıda "İstiyorum" butonu belirir.
-2. 2 numaralı, taş atıldıktan sonraki **ilk 2–3 saniye desteden çekemez**
-   (diğerlerine garanti tepki süresi). Süre yapılandırılabilir olmalı.
+2. 2 numaralı **beklemez**: dilerse aynı anda çeker. Kendi sıra süresi
+   (§9 0.4, 30 sn) boyunca düşünebilir; diğerlerinin tepki süresi de tam
+   olarak bu süredir.
 3. 2 numaralı taşı alırsa iş biter, talepler düşer.
 4. 2 numaralı desteden çekerse pencere kapanır ve o an talepte bulunanların
    **en öncelikli olanı** taşı alır: taş + desteden 1 ceza taşı + 5 puan.
-5. Talep **bağlayıcıdır.** İstedin ve sıra sana kaldıysa alırsın, ödersin.
+5. Kimse talep etmemişse taş **yerde kalır.**
+6. Talep **bağlayıcıdır.** İstedin ve sıra sana kaldıysa alırsın, ödersin.
+
+Örnek: 1 numaralı attı. 5. saniyede 3 numaralı, 8. saniyede 4 numaralı
+"istiyorum" dedi. 15. saniyede 2 numaralı taşı almayıp desteden çekti —
+taş **3 numaralıya** gider (öncelik atan+2), 4 numaralının talebi düşer.
 
 ### Kurallar
 
@@ -189,10 +200,21 @@ Yalnızca çift turunda geçerlidir. Atılan taşın **birebir eşini elinde tut
 oyuncu koltuk önceliğinin tamamını geçer — sırası gelen oyuncunun bedelsiz
 hakkı dahil.
 
-Örnek: 1 numaralı `kirmizi7` attı, o taşın eşi 4 numaralının ıstakasında.
-2 numaralı taşı alamaz; desteden çeker ve sırasına devam eder. 4 numaralı
-taşı alır, desteden 1 ceza taşı çeker, 5 ceza puanı yazar — bedel normal
-çalmanın aynısıdır ve sırayı yine harcamaz.
+**Bu bir talep değil, hamlenin kendisidir** (0.10). "Çiftim var" diyen oyuncu
+taşı **o anda** alır; kuyruğa girmez, kimsenin sırasını beklemez. Kimin daha
+önce "istiyorum" dediğinin bir önemi yoktur.
+
+Örnek: 1 numaralı `kirmizi7` attı. 3 numaralı "istiyorum" dedi. 4 numaralının
+elinde o taşın eşi var ve "çiftim var" diyor: taş **4 numaralınındır**.
+4 numaralı taşı ve desteden 1 ceza taşını alır, 5 ceza puanı yazar — bedel
+normal çalmanın aynısıdır ve sırayı yine harcamaz. 2 numaralı, kendi bedelsiz
+hakkını kullanamaz; **desteden çeker** ve sırasına devam eder. 3 numaralının
+talebi düşer.
+
+**"Çiftim var" tuşu yalnızca eş gerçekten ıstakadaysa açılır** ve bu bir
+kullanıcı kolaylığı değil, kuralın kendisidir. Elinde olmayan bir taş için
+"çiftim var" diyebilmek, işine yarayan her taşı bedavaya toplamak olurdu.
+Sunucu bunu ayrıca doğrular; olmayan talebi reddeder.
 
 - **Blöf mümkün değildir.** Talep ancak taşın birebir eşi gerçekten ıstakada
   ise geçerlidir; sunucu bunu doğrular ve olmayan talebi reddeder. İstemcideki
@@ -201,9 +223,13 @@ taşı alır, desteden 1 ceza taşı çeker, 5 ceza puanı yazar — bedel norma
 - Bir taştan destede iki kopya olduğu için **en fazla bir oyuncu** hak sahibi
   olabilir; iki kişi aynı anda haklı çıkamaz.
 - Elinde eş olan yoksa her şey yukarıdaki normal önceliğe göre işler.
-- Bu hak sırası gelen oyuncunun hakkını geçtiği için, tur 15'te sırası gelen
-  oyuncu **talep penceresi kapanmadan yerden taş alamaz.** Diğer 15 turda
-  pencere yalnızca desteden çekmeyi geciktirir.
+- Çalmanın bedeli desteden bir taştır; **deste boşsa** çalınamaz.
+- **Dört çiftini indirmiş (açmış) oyuncunun bu hakkı kapanır** (0.10). Açtıktan
+  sonra oyun küt ve seriyle devam eder (§6, §10.2); çift toplamanın karşılığı
+  kalmaz. "Çiftim var" tuşu da söner.
+- Sırası gelen oyuncu taşı **önce** alırsa taş onundur: pencere onun hamlesiyle
+  kapanır (0.9). Sayaç olmadığı için bu yarış kaçınılmazdır ve iki yönde de
+  aynı işler.
 
 ### Talep görünürlüğü
 
@@ -353,7 +379,7 @@ bölümlere işlendi. Aşağıdaki tablo özet, kaynak metin ilgili bölümdür.
 | 3 | Tur 16'da "açamadın ×2" işliyor mu? | Evet, bitiren dışında herkes | §8 |
 | 4 | Deste tükenince -100 var mı? | Yok. Ceza taşı puanları yine eklenir | §7 |
 | 5 | Kazanan çalma cezası öder mi? | Öder: `-100 + 5 × çalış` | §8 |
-| 6 | Talep penceresi kaç saniye? | 3000 ms; oda ayarı olarak değiştirilebilir | §5 |
+| 6 | Talep penceresi kaç saniye? | ~~3000 ms~~ → **süresiz**, 0.9 ile değişti | §5, 0.9 |
 | 7 | Tur 16'da okeyle bitme çarpanı? | Geçerli; açamama ile birlikte ×4 | §8 |
 
 ### 0.3 ile eklenenler (28 Ağustos 2026)
@@ -365,6 +391,7 @@ bölümlere işlendi. Aşağıdaki tablo özet, kaynak metin ilgili bölümdür.
 | Kütteki okeyi alma | Kütü dört renge tamamlamak zorunlu | §6 |
 
 Ayrıca 0.1'de hiç yazmayan **tur 15 "çifti bende" hakkı** eklendi (§5).
+Bu hakkın nasıl işlediği 0.10 ile netleştirildi.
 
 ### 0.4 ile eklenenler (29 Ağustos 2026)
 
@@ -480,6 +507,74 @@ açtığı `4-5-6-okey(7)` serisinin, başkası `siyah2` işlediği için sessiz
 
 Kütte durum farklı ve **değişmedi**: kütteki okeyin rengi belirsiz olabildiği
 için (§6 — dört rengi tamamlama şartı) orada sabitlenecek bir "yer" yok.
+
+### 0.9 ile eklenenler (8 Eylül 2026)
+
+| Konu | Karar | Nerede |
+|---|---|---|
+| Talep penceresinin süresi | **Kalktı.** Pencere, sırası gelen oyuncu oynayana kadar açıktır | §5 |
+
+0.1'de pencereye 3 saniyelik bir sayaç konmuştu (§9.6) ve sırası gelen oyuncu
+o süre boyunca desteden çekemiyordu. İki yönde birden yanlıştı:
+
+- **Hızlı oynayan herkesi bekletiyordu.** Kimse taşı istemese bile sıradaki
+  oyuncu her turda 3 saniye duruyordu; 16 turluk bir maçta bu, oyunun
+  temposunu görünür biçimde düşürüyordu.
+- **Düşünene az geliyordu.** 3 saniye, atılan taşın işine yarayıp
+  yaramadığını anlamaya çoğu zaman yetmiyordu.
+
+Yeni kural tek bir cümle: **pencere, sırası gelen oyuncu hamlesini yapana
+kadar açıktır.** Tepki süresi artık sabit değil, sırası gelenin düşünme
+süresi kadar — o da §9 0.4'ün 30 saniyesiyle zaten sınırlı, yani pencere
+sonsuza kadar açık kalamıyor.
+
+Sonuçları:
+
+- Sırası gelen oyuncu **hiç beklemez**; taş atılır atılmaz çekebilir
+- Diğerleri, sırası gelen oynamadan **önce** "istiyorum" demek zorunda
+- Demezlerse hakları yanar; taş yerde kalır
+- Öncelik değişmedi: talep edenlerin en öncelikli olanı alır (§5)
+- Tur 15 "çifti bende" hakkı da aynı çizgiye geldi: talep **önce gelmişse**
+  sırası gelenin bedelsiz hakkını geçer, gelmemişse geçmez
+
+Motorda karşılığı: `KuralAyarlari.talepPenceresiMs` ve
+`TalepPenceresi.acilisZamani` kaldırıldı, `pencere-suresi-dolmadi` hata
+kodu silindi. Motor artık talep penceresi için **hiç saat okumuyor** —
+CLAUDE.md #2 ile zaten aynı yöne bakan bir sadeleşme.
+
+### 0.10 ile eklenenler (8 Eylül 2026)
+
+| Konu | Karar | Nerede |
+|---|---|---|
+| "Çiftim var" | **Talep değil, anında sonuçlanan hamle** | §5 |
+| Açmış oyuncunun çift hakkı | **Kapanır** — dört çiftten sonra çiftle iş biter | §5, §6 |
+
+**Neden anında.** 0.9'da talep penceresinin süresi kalktı ve pencere artık
+sırası gelen oyuncunun hamlesiyle kapanıyor. "Çifti bende" hakkı kuyruğa
+giren bir talep olarak kalsaydı, sırası gelen oyuncu ondan önce davranıp taşı
+alabilirdi — §5'in "koltuk önceliğinin tamamını geçer" sözü yalnızca yavaş
+oynayana karşı geçerli olurdu. Herkesi bekletmek için sayaç koymak ise 0.9'un
+kaldırdığı şeydi.
+
+Geriye tek tutarlı okuma kalıyor: **çift talebi geldiği anda taşı alır.**
+Bedeli değişmedi (taş + 1 ceza taşı + 5 puan) ve sırayı yine harcamıyor.
+Sırası gelen oyuncu taşı kaptırmış olur; desteden çeker.
+
+Bunun bir sonucu: kimin daha önce "istiyorum" dediği artık hiç fark etmiyor.
+Normal talepler zaten koltuk önceliğine göre çözülüyordu (§5); çift talebi de
+o sıralamanın dışında, kendi başına duruyor.
+
+**Neden açan oyuncuda kapanıyor.** Tur 15'in açılış şartı dört çifttir ve
+açıldıktan sonra fazladan çift indirilemez (§6, §10.2) — oyun küt ve seriyle
+devam eder. Çift toplamaya devam edebilen bir oyuncu, karşılığı olmayan taşları
+ceza ödeyerek biriktirmiş olurdu. Açtıktan sonra "çiftim var" tuşu söner;
+oyuncu normal "istiyorum" hakkını kullanmaya devam eder.
+
+Motorda karşılığı: `CIFT_TALEBI` artık durumu doğrudan değiştiriyor,
+`TalepPenceresi.ciftTalebi` alanı kalktı, `cift-talebi-oncelikli` ve
+`zaten-cift-talebi-var` hata kodları silindi, `ceza-tasi-kalmadi` eklendi.
+Ekran için `OyunDurumu.sonCalan` eklendi: atık öbeğinden eksilen taşın kime
+gittiğini göstermek gerekiyor.
 
 Motor bu kararlara göre yazıldı; her biri için en az bir test var.
 

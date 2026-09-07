@@ -268,9 +268,8 @@ describe('mac toplami — KURALLAR.md §8', () => {
 });
 
 describe('varsayilan ayarlar §9 kararlarini tasiyor', () => {
-  it('yedi madde de kayitli', () => {
+  it('kararlarin hepsi kayitli', () => {
     expect(VARSAYILAN_AYARLAR).toEqual({
-      talepPenceresiMs: 3000,
       // §9 0.4 — sira suresi kademeleri. Motorda sayac yok, yalnizca deger.
       siraSureleriMs: [30000, 20000, 10000],
       islerTasCezasi: 50,

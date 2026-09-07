@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import type { Tas } from '@kut/engine';
 import { OLCULER, type TasBoyu, type TasOlcusu } from '../olculer';
@@ -30,7 +31,13 @@ interface Ozellikler {
   readonly bitirir?: boolean;
 }
 
-export function TasGorseli({
+/**
+ * `memo`: istakada 20+ tas var ve her biri ayni props'la yeniden ciziliyordu.
+ * Bir tasi secmek digerlerini ilgilendirmiyor; props'un tamami ilkel deger ya
+ * da (paket icinde sabit kalan) tas nesnesi oldugu icin sig karsilastirma
+ * dogru sonucu veriyor.
+ */
+export const TasGorseli = memo(function TasGorseli({
   tas,
   boy = 'buyuk',
   secili = false,
@@ -89,7 +96,7 @@ export function TasGorseli({
       )}
     </View>
   );
-}
+});
 
 /** Kapali tas — bos atik yigini icin. */
 export function KapaliTas({ boy = 'kucuk' }: { readonly boy?: TasBoyutu }) {

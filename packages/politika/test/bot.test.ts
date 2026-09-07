@@ -18,8 +18,8 @@ import {
   type YerPeri,
 } from '@kut/engine';
 import { reduce } from '@kut/engine';
-import { acilisBul, atilacakTas, botAksiyonu, islenebilir } from './bot';
-import { sureDolduAksiyonu } from './sure';
+import { acilisBul, atilacakTas, botAksiyonu, islenebilir } from '../src/bot';
+import { sureDolduAksiyonu } from '../src/sure';
 
 const t = (renk: Renk, sayi: Sayi, kopya: 'a' | 'b' = 'a'): Tas => normalTas(renk, sayi, kopya);
 const ok = (kopya: 'a' | 'b' = 'a'): Tas => okeyTas(kopya);
@@ -69,6 +69,7 @@ function gorunumKur(p: {
     islemeYapabilirim: p.islemeYapabilirim ?? (p.acmisMi ?? false),
     okeyFirsatlarim: [],
     pencere: p.pencere ?? null,
+    sonCalan: null,
     sonuc: null,
   };
 }
@@ -314,61 +315,57 @@ describe('botAksiyonu', () => {
   });
 });
 
-describe('tur 15 — bot alamayacagi tasi istemez (kilitlenme hatasi)', () => {
-  // Gercek oyunda cikti: karsidaki atti, sira botta, insan "CIFTIM VAR"
-  // dedi. Bot yine de yerden almak isteyince motor `cift-talebi-oncelikli`
-  // ile reddetti; reddedilen aksiyon durumu degistirmedigi icin sira
-  // kilitlendi. KURALLAR.md §5 — cift hakki bedelsiz hakki da geçer.
+describe('tur 15 — cift calmasi botu kilitlemiyor', () => {
+  // Gercek oyunda cikti: karsidaki atti, sira botta, insan "CIFTIM VAR" dedi.
+  // Eski kuralda cift talebi KUYRUGA giriyordu; bot yine de yerden almak
+  // isteyince motor reddediyor, reddedilen aksiyon durumu degistirmedigi icin
+  // sira kilitleniyordu.
+  //
+  // §9 0.10 ile talep kuyruga girmiyor: geldigi anda tasi aliyor ve pencereyi
+  // kapatiyor. Yani bot ya acik bir pencere goruyor (alabilir) ya da kapali
+  // (desteden ceker). Arada kalinan hal kalmadi.
   const atilan = t('kirmizi', 7);
 
-  const kur = (ciftTalebi: OyuncuId | null): OyuncuGorunumu =>
+  const kur = (pencereVar: boolean): OyuncuGorunumu =>
     gorunumKur({
-      // Atilan tas bota bir per kazandiriyor: kisit olmasa yerden alirdi.
+      // Atilan tas bota bir per kazandiriyor: alabiliyorsa alir.
       istakam: [t('kirmizi', 5), t('kirmizi', 6), t('sari', 2), t('mavi', 9)],
       tur: 15,
       faz: 'cekme',
       siradaki: 0,
       atikYiginlari: oyuncuKaydiOlustur((o: OyuncuId) =>
-        o === 2 ? { ustTas: atilan, adet: 1 } : { ustTas: null, adet: 0 },
+        o === 2 && pencereVar ? { ustTas: atilan, adet: 1 } : { ustTas: null, adet: 0 },
       ),
-      pencere: {
-        atan: 2,
-        tasId: atilan.id,
-        acilisZamani: 0,
-        kapanisZamani: 3000,
-        talepler: [],
-        ciftTalebi,
-        ciftHakkim: false,
-      },
+      ...(pencereVar
+        ? { pencere: { atan: 2 as OyuncuId, tasId: atilan.id, talepler: [], ciftHakkim: false } }
+        : {}),
     });
 
-  it('cift talebi varken desteden ceker, yerden ALMAZ', () => {
-    expect(botAksiyonu(kur(1), 0, 9000)).toEqual({
-      tip: 'CEK_DESTEDEN',
-      oyuncu: 0,
-      suAn: 9000,
-    });
-  });
-
-  it('cift talebi yokken yerden almaya devam eder — kural daralmadi', () => {
-    expect(botAksiyonu(kur(null), 0, 9000)).toEqual({
+  it('pencere acikken yerden alir', () => {
+    expect(botAksiyonu(kur(true), 0, 9000)).toEqual({
       tip: 'CEK_ATIKTAN',
       oyuncu: 0,
       suAn: 9000,
     });
   });
 
-  it('cift hakki kapaliysa talep varsa bile yerden alir', () => {
-    const gorunum = { ...kur(1), ayarlar: { ...VARSAYILAN_AYARLAR, ciftCalmaHakki: false } };
-    expect(botAksiyonu(gorunum, 0, 9000)).toMatchObject({ tip: 'CEK_ATIKTAN' });
+  it('tas calindiysa (pencere kapali) desteden ceker', () => {
+    expect(botAksiyonu(kur(false), 0, 9000)).toEqual({
+      tip: 'CEK_DESTEDEN',
+      oyuncu: 0,
+      suAn: 9000,
+    });
   });
 });
 
 describe('tur 15 kilitlenmesi — uctan uca', () => {
-  // Kullanicinin karsilastigi el: 2 numarali atti, sira 1'de, 0 "cifti bende"
-  // dedi. Botun sectigi hamle MOTOR TARAFINDAN KABUL EDILMELI; aksi halde
-  // reddedilen aksiyon durumu degistirmedigi icin sira ilerlemiyor.
+  // Kullanicinin karsilastigi el: 2 numarali atti, sira 1'de, 0 numaralinin
+  // elinde atilan tasin birebir esi var. Iki sey birden dogrulanmali:
+  // cift talebi tasi GERCEKTEN aliyor, ve ondan sonra botun sectigi hamle
+  // MOTOR TARAFINDAN KABUL EDILIYOR (aksi halde sira ilerlemiyor).
   const atilan = normalTas('kirmizi', 7, 'a');
+  const esi = normalTas('kirmizi', 7, 'b');
+  const ceza = normalTas('sari', 3, 'a');
 
   const durum = {
     ayarlar: VARSAYILAN_AYARLAR,
@@ -376,10 +373,10 @@ describe('tur 15 kilitlenmesi — uctan uca', () => {
     baslayan: 0 as OyuncuId,
     siradaki: 1 as OyuncuId,
     faz: 'cekme' as const,
-    deste: [normalTas('sari', 3, 'a'), normalTas('sari', 4, 'a')],
+    deste: [ceza, normalTas('sari', 4, 'a')],
     istakalar: oyuncuKaydiOlustur<readonly Tas[]>((o) =>
       o === 0
-        ? [normalTas('kirmizi', 7, 'b')]
+        ? [esi]
         : o === 1
           ? [normalTas('kirmizi', 5, 'a'), normalTas('kirmizi', 6, 'a')]
           : [],
@@ -396,28 +393,31 @@ describe('tur 15 kilitlenmesi — uctan uca', () => {
     pencere: {
       atan: 2 as OyuncuId,
       tasId: atilan.id,
-      acilisZamani: 0,
       talepler: [] as readonly OyuncuId[],
-      ciftTalebi: 0 as OyuncuId | null,
     },
+    sonCalan: null,
     sonuc: null,
   };
 
-  it('botun hamlesi motor tarafindan KABUL ediliyor — sira ilerliyor', () => {
-    const aksiyon = botAksiyonu(viewFor(durum, 1), 1, 9000);
-    expect(aksiyon).not.toBeNull();
-    const sonuc = reduce(durum, aksiyon as NonNullable<typeof aksiyon>);
-    expect(sonuc.ok).toBe(true);
-    if (sonuc.ok) expect(sonuc.state.faz).toBe('atma');
-  });
-
-  it('cift talep eden oyuncu tasi gercekten aliyor (§5)', () => {
-    const aksiyon = botAksiyonu(viewFor(durum, 1), 1, 9000);
-    const sonuc = reduce(durum, aksiyon as NonNullable<typeof aksiyon>);
+  it('cift talep eden oyuncu tasi ANINDA aliyor (§5, §9 0.10)', () => {
+    const sonuc = reduce(durum, { tip: 'CIFT_TALEBI', oyuncu: 0, suAn: 9000 });
     expect(sonuc.ok).toBe(true);
     if (!sonuc.ok) return;
     expect(sonuc.state.istakalar[0].map((tas) => tas.id)).toContain(atilan.id);
     expect(sonuc.state.calinanSayisi[0]).toBe(1);
+    expect(sonuc.state.pencere).toBe(null);
+  });
+
+  it('caldiktan sonra botun hamlesi KABUL ediliyor — sira ilerliyor', () => {
+    const calindi = reduce(durum, { tip: 'CIFT_TALEBI', oyuncu: 0, suAn: 9000 });
+    expect(calindi.ok).toBe(true);
+    if (!calindi.ok) return;
+
+    const aksiyon = botAksiyonu(viewFor(calindi.state, 1), 1, 9100);
+    expect(aksiyon).not.toBeNull();
+    const sonuc = reduce(calindi.state, aksiyon as NonNullable<typeof aksiyon>);
+    expect(sonuc.ok).toBe(true);
+    if (sonuc.ok) expect(sonuc.state.faz).toBe('atma');
   });
 
   it('kurtarma yolu cekme fazinda AT demez — eski hata buydu', () => {

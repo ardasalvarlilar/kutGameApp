@@ -99,6 +99,78 @@ export const parolayiSifirla = (
 export const hesabiSil = (jeton: string): Promise<Yanit<{ silindi: boolean }>> =>
   cagir({ yol: '/kimlik/hesap', yontem: 'DELETE', jeton });
 
+// --- Parola degistirme -------------------------------------------------------
+//
+// Sifirlamadan (yukarisi) AYRI: bu, parolasini BILEN oyuncunun degistirmesi.
+// Mevcut parola zorunlu — jeton 30 gun cihazda duruyor, yalnizca jetona
+// guvenmek telefonu eline geciren birine hesabi devretmek olurdu.
+
+export const parolayiDegistir = (
+  jeton: string,
+  mevcutParola: string,
+  yeniParola: string,
+): Promise<Yanit<GirisVerisi>> =>
+  cagir({ yol: '/kimlik/parola', govde: { mevcutParola, yeniParola }, jeton });
+
+// --- Arkadaslik --------------------------------------------------------------
+//
+// Arama yalnizca ARKADAS KODUYLA: gorunen ad benzersiz degil, e-posta ile
+// aramak ise hangi adreslerin kayitli oldugunu sizdirirdi (sunucudaki
+// servisler/arkadasServisi.ts'te ayni not).
+
+export interface ArkadasOzeti {
+  readonly id: string;
+  readonly ad: string;
+  /** ISO zaman damgasi. */
+  readonly sonGorulme: string;
+  /** Arkadasin su an oturdugu, katilinabilir masanin kodu; yoksa null. */
+  readonly masaKodu: string | null;
+}
+
+export interface ArkadasIstegiOzeti {
+  readonly id: string;
+  readonly ad: string;
+  readonly zaman: string;
+}
+
+export interface ArkadasDurumu {
+  readonly arkadaslar: readonly ArkadasOzeti[];
+  readonly gelenIstekler: readonly ArkadasIstegiOzeti[];
+  readonly gidenIstekler: readonly ArkadasIstegiOzeti[];
+  readonly kodum: string;
+}
+
+export type ArkadasIliskisi = 'yok' | 'bekliyor' | 'istek-geldi' | 'arkadas' | 'ben';
+
+export interface BulunanOyuncu {
+  readonly id: string;
+  readonly ad: string;
+  readonly iliski: ArkadasIliskisi;
+}
+
+export const arkadaslariGetir = (jeton: string): Promise<Yanit<ArkadasDurumu>> =>
+  cagir({ yol: '/arkadas', jeton });
+
+export const arkadasAra = (
+  jeton: string,
+  kod: string,
+): Promise<Yanit<{ bulunan: BulunanOyuncu | null }>> =>
+  cagir({ yol: `/arkadas/ara?kod=${encodeURIComponent(kod)}`, jeton });
+
+/** Durum degistiren uclar GUNCEL LISTEYI de doner; ikinci bir GET gerekmiyor. */
+export const arkadasIstegi = (
+  jeton: string,
+  oyuncuId: string,
+): Promise<Yanit<ArkadasDurumu & { sonuc: string }>> =>
+  cagir({ yol: '/arkadas/istek', govde: { oyuncuId }, jeton });
+
+export const arkadasKabul = (jeton: string, oyuncuId: string): Promise<Yanit<ArkadasDurumu>> =>
+  cagir({ yol: '/arkadas/kabul', govde: { oyuncuId }, jeton });
+
+/** Istegi reddetmek ve arkadasligi bitirmek ayni uc: ikisi de iliskiyi siler. */
+export const arkadasSil = (jeton: string, oyuncuId: string): Promise<Yanit<ArkadasDurumu>> =>
+  cagir({ yol: '/arkadas/sil', govde: { oyuncuId }, jeton });
+
 // --- Push bildirimi cihaz kaydi ---------------------------------------------
 //
 // Bildirimin KENDISI sunucudan geliyor; buradan giden yalnizca "bu cihaza

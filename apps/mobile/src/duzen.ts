@@ -90,10 +90,24 @@ export function duzendekiTaslar(duzen: Duzen): readonly TasId[] {
   return duzen.filter((tasId): tasId is TasId => tasId !== null);
 }
 
+/** Iki duzen slot slot ayni mi? */
+function ayniDuzenMi(bir: Duzen, iki: Duzen): boolean {
+  if (bir === iki) return true;
+  if (bir.length !== iki.length) return false;
+  return bir.every((slot, indeks) => slot === iki[indeks]);
+}
+
 /**
  * Duzeni guncel istakayla eslestirir: yere inen ya da atilan taslari duser,
  * yeni cekilen taslari ilk bos slota koyar. Oyuncunun kurdugu bosluklar korunur.
  * Sutun sayisi degistiyse (ekran olculdugunde) izgara yeniden kurulur.
+ *
+ * DEGISIKLIK YOKSA AYNI DIZIYI DONDURUR. Bu bir mikro-optimizasyon degil,
+ * ekranin gereksiz yere yeniden cizilmesini onleyen sart: cevrimici oyunda
+ * her `oyun:gorunum` paketi yepyeni bir `istakam` dizisi getiriyor ve bu
+ * fonksiyon her seferinde yeni bir dizi dondurdugu icin `setDuzen` durumu
+ * "degismis" sayip butun masayi yeniden ciziyordu — rakiplerin hamlelerinde
+ * bile, kendi istakamda tek bir tas kimildamamisken.
  */
 export function duzenTazele(duzen: Duzen, istaka: readonly Tas[], sutunSayisi: number): Duzen {
   const eldekiler = new Set(istaka.map((tas) => tas.id));
@@ -115,7 +129,7 @@ export function duzenTazele(duzen: Duzen, istaka: readonly Tas[], sutunSayisi: n
   });
 
   const yeniler = istaka.filter((tas) => !gorulenler.has(tas.id)).map((tas) => tas.id);
-  if (yeniler.length === 0) return sonuc;
+  if (yeniler.length === 0) return ayniDuzenMi(sonuc, duzen) ? duzen : sonuc;
 
   // Yeni taslara yer yoksa once bosluklari kapat.
   const bosSayisi = sonuc.filter((slot) => slot === null).length;
@@ -143,7 +157,7 @@ export function duzenTazele(duzen: Duzen, istaka: readonly Tas[], sutunSayisi: n
     sonuc[hedef] = tasId;
     hedef += 1;
   }
-  return sonuc;
+  return ayniDuzenMi(sonuc, duzen) ? duzen : sonuc;
 }
 
 /**

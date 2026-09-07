@@ -30,8 +30,14 @@ import {
   acikMasalar,
   acikMasam,
   baslayabilirMi,
+  botKimligi,
+  botlariDoldur,
+  botuCikar,
   hazirDurumu,
   hizliMasa,
+  koltugaGec,
+  koltukTalebiCevapla,
+  koltukTalebiGonder,
   masaGorunumu,
   masaKur,
   masadanCik,
@@ -69,6 +75,8 @@ const TUR_ARASI_MS = 6_000;
 const katilSemasi = z.object({ kod: z.string().trim().min(3).max(12) });
 const kurSemasi = z.object({ ozel: z.boolean().optional() });
 const hazirSemasi = z.object({ hazir: z.boolean() });
+const koltukSemasi = z.object({ koltuk: z.number().int().min(0).max(3) });
+const koltukCevapSemasi = z.object({ isteyenId: z.string().min(1), kabul: z.boolean() });
 const aksiyonSemasi = z.object({
   aksiyon: z
     .object({
@@ -120,6 +128,8 @@ async function gerekirseBaslat(io: Server, masaId: string): Promise<void> {
   if (masa === null || !baslayabilirMi(masa)) return;
 
   masa.durum = 'oynaniyor';
+  // El basladi: bekleyen koltuk talepleri artik anlamsiz.
+  masa.set('koltukTalepleri', []);
   await masa.save();
 
   const oturanlar: Oturan[] = masa.koltuklar
@@ -127,7 +137,8 @@ async function gerekirseBaslat(io: Server, masaId: string): Promise<void> {
     .sort((a, b) => a.no - b.no)
     .map((koltuk) => ({
       koltuk: koltuk.no as OyuncuId,
-      oyuncuId: String(koltuk.oyuncu),
+      oyuncuId: koltuk.bot ? botKimligi(koltuk.no) : String(koltuk.oyuncu),
+      bot: koltuk.bot,
       bagli: true,
     }));
 
@@ -158,13 +169,18 @@ async function elBittiginde(io: Server, oturum: MasaOturumu): Promise<void> {
   const bilgi = oturum.oyun.elBilgisi;
   const sonuc = oturum.oyun.sonuc;
   const sirali = oturum.oturanlar.slice().sort((a, b) => a.koltuk - b.koltuk);
+  // Istatistik ve el kaydi yalnizca GERCEK oyuncular icin: bot kimligi
+  // (`bot:2`) bir ObjectId degil, Mongo sorgusunda hata verirdi.
+  const insanlar = sirali.filter((o) => !o.bot);
 
   await ElKaydi.create({
     masa: masa._id,
     tur: bilgi.tur,
     tohum: bilgi.tohum,
     baslayan: bilgi.baslayan,
-    oturanlar: sirali.map((o) => o.oyuncuId),
+    oturanlar: sirali.map((o) =>
+      o.bot ? { no: o.koltuk, bot: true } : { no: o.koltuk, oyuncu: o.oyuncuId, bot: false },
+    ),
     aksiyonlar: bilgi.aksiyonlar,
     sonuc,
   });
@@ -174,9 +190,10 @@ async function elBittiginde(io: Server, oturum: MasaOturumu): Promise<void> {
       const onceki = masa.puanlar.get(String(oturan.koltuk)) ?? 0;
       masa.puanlar.set(String(oturan.koltuk), onceki + sonuc.puanlar[oturan.koltuk]);
     }
+    const kazanan = sonuc.kazanan === null ? undefined : oturum.oyuncusu(sonuc.kazanan);
     void elIsle({
-      oyuncuIdler: sirali.map((o) => o.oyuncuId),
-      kazananId: sonuc.kazanan === null ? null : (oturum.oyuncusu(sonuc.kazanan)?.oyuncuId ?? null),
+      oyuncuIdler: insanlar.map((o) => o.oyuncuId),
+      kazananId: kazanan === undefined || kazanan.bot ? null : kazanan.oyuncuId,
     });
   }
 
@@ -209,10 +226,11 @@ async function elBittiginde(io: Server, oturum: MasaOturumu): Promise<void> {
 
   if (macBitti) {
     void macIsle(
-      sirali.map((o) => o.oyuncuId),
+      insanlar.map((o) => o.oyuncuId),
       macKazananlari
-        .map((koltuk) => oturum.oyuncusu(koltuk)?.oyuncuId)
-        .filter((id): id is string => id !== undefined),
+        .map((koltuk) => oturum.oyuncusu(koltuk))
+        .filter((oturan): oturan is NonNullable<typeof oturan> => oturan !== undefined && !oturan.bot)
+        .map((oturan) => oturan.oyuncuId),
     );
     oturum.kapat();
     oturumlar.delete(oturum.masaId);
@@ -395,6 +413,57 @@ export function soketiKur(io: Server): void {
       }
     });
 
+    // --- Masa duzeni: botlar ve koltuklar ------------------------------------
+    //
+    // Hepsi yalnizca `bekliyor` durumunda calisiyor; kontroller servis
+    // katmaninda (masaServisi), burasi yalnizca girdiyi cozup yayin yapiyor.
+
+    /** Ortak kalip: masa duzenini degistir, herkese yay, gerekirse basla. */
+    const duzeniDegistir = async (
+      yanit: (s: Yanit<unknown>) => void,
+      is: () => Promise<{ _id: unknown }>,
+    ): Promise<void> => {
+      try {
+        const masa = await is();
+        const masaId = String(masa._id);
+        yanit(basarili({ masa: await masaGorunumu(masa as never) }));
+        await masayiYay(io, masaId);
+        await gerekirseBaslat(io, masaId);
+      } catch (hata) {
+        yanit(basarisiz(hataMesaji(hata)));
+      }
+    };
+
+    soket.on('masa:botDoldur', async (_girdi: unknown, yanit: (s: Yanit<unknown>) => void) => {
+      await duzeniDegistir(yanit, () => botlariDoldur(kimlik));
+    });
+
+    soket.on('masa:botCikar', async (girdi: unknown, yanit: (s: Yanit<unknown>) => void) => {
+      const cozum = koltukSemasi.safeParse(girdi);
+      if (!cozum.success) return yanit(basarisiz('Geçersiz koltuk'));
+      await duzeniDegistir(yanit, () => botuCikar(kimlik, cozum.data.koltuk));
+    });
+
+    soket.on('masa:koltugaGec', async (girdi: unknown, yanit: (s: Yanit<unknown>) => void) => {
+      const cozum = koltukSemasi.safeParse(girdi);
+      if (!cozum.success) return yanit(basarisiz('Geçersiz koltuk'));
+      await duzeniDegistir(yanit, () => koltugaGec(kimlik, cozum.data.koltuk));
+    });
+
+    soket.on('masa:koltukTalebi', async (girdi: unknown, yanit: (s: Yanit<unknown>) => void) => {
+      const cozum = koltukSemasi.safeParse(girdi);
+      if (!cozum.success) return yanit(basarisiz('Geçersiz koltuk'));
+      await duzeniDegistir(yanit, () => koltukTalebiGonder(kimlik, cozum.data.koltuk));
+    });
+
+    soket.on('masa:koltukCevap', async (girdi: unknown, yanit: (s: Yanit<unknown>) => void) => {
+      const cozum = koltukCevapSemasi.safeParse(girdi);
+      if (!cozum.success) return yanit(basarisiz('Geçersiz istek'));
+      await duzeniDegistir(yanit, () =>
+        koltukTalebiCevapla(kimlik, cozum.data.isteyenId, cozum.data.kabul),
+      );
+    });
+
     soket.on('masa:cik', async (_girdi: unknown, yanit: (s: Yanit<unknown>) => void) => {
       try {
         const mevcut = await acikMasam(kimlik);
@@ -452,22 +521,33 @@ export function soketiKur(io: Server): void {
       kayit.bilgi(`Ayrıldı: ${soket.data.ad as string}`, { kimlik });
       if (masaId === null || kapaniyor) return;
 
-      // Ayni oyuncunun baska bir soketi hala aciksa (uygulama yeniden
-      // yuklendi, iki sekme) baglanti kopmus SAYILMAZ.
-      const baskaSoket = (await io.in(`oyuncu:${kimlik}`).fetchSockets()).some(
-        (baska) => baska.id !== soket.id,
-      );
-      if (baskaSoket) return;
+      // Govde try/catch icinde: bu isleyicinin cagirani yok, firlatan bir
+      // satir dogrudan "unhandled rejection" oluyor ve Node'u dusurebiliyor.
+      // Gercek bir ornegi var: iki oyuncu ayni anda kopunca ikisi de ayni
+      // masa belgesini `save()` etmeye calisiyor ve ikincisi mongoose'un
+      // `VersionError`unu aliyor. Kopan bir soket yuzunden sunucunun
+      // dusmemesi gerekiyor.
+      try {
 
-      oturumlar.get(masaId)?.baglantiDurumu(kimlik, false);
+        // Ayni oyuncunun baska bir soketi hala aciksa (uygulama yeniden
+        // yuklendi, iki sekme) baglanti kopmus SAYILMAZ.
+        const baskaSoket = (await io.in(`oyuncu:${kimlik}`).fetchSockets()).some(
+          (baska) => baska.id !== soket.id,
+        );
+        if (baskaSoket) return;
 
-      // Oyun baslamadiysa koltugu bosalt; bekleyen masa kilitlenmesin.
-      const masa = await Masa.findById(masaId);
-      if (masa !== null && masa.durum === 'bekliyor') {
-        const kalan = await masadanCik(kimlik);
-        if (kalan !== null && kalan.durum === 'bitti') oturumuBitir(io, masaId, 'Masa kapandı');
+        oturumlar.get(masaId)?.baglantiDurumu(kimlik, false);
+
+        // Oyun baslamadiysa koltugu bosalt; bekleyen masa kilitlenmesin.
+        const masa = await Masa.findById(masaId);
+        if (masa !== null && masa.durum === 'bekliyor') {
+          const kalan = await masadanCik(kimlik);
+          if (kalan !== null && kalan.durum === 'bitti') oturumuBitir(io, masaId, 'Masa kapandı');
+        }
+        await masayiYay(io, masaId);
+      } catch (hata) {
+        kayit.uyari('Kopma islenirken hata', hata);
       }
-      await masayiYay(io, masaId);
     });
   });
 }

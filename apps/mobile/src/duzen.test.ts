@@ -150,3 +150,30 @@ describe('ayir ve topla', () => {
     expect(duzenGruplari(topla(duzen, SUTUN), SUTUN)).toEqual([[id(a), id(b), id(c)]]);
   });
 });
+
+describe('duzenTazele degisiklik yoksa AYNI diziyi dondurur', () => {
+  // Cevrimici oyunda her sunucu paketi yeni bir `istakam` dizisi getiriyor.
+  // Yeni bir duzen dondurmek, hicbir sey degismemisken butun masayi yeniden
+  // cizdiriyordu (bkz. duzen.ts).
+  it('ayni istakayla cagrilinca referans korunur', () => {
+    const istaka = [a, b, c];
+    const duzen = duzenOlustur([[id(a), id(b), id(c)]], SUTUN);
+
+    // Ayni icerik, FARKLI dizi — sunucudan gelen paketin yaptigi tam olarak bu.
+    expect(duzenTazele(duzen, [...istaka], SUTUN)).toBe(duzen);
+  });
+
+  it('tas eksilirse yeni duzen doner', () => {
+    const duzen = duzenOlustur([[id(a), id(b), id(c)]], SUTUN);
+    const sonra = duzenTazele(duzen, [a, b], SUTUN);
+    expect(sonra).not.toBe(duzen);
+    expect(duzendekiTaslar(sonra)).toEqual([id(a), id(b)]);
+  });
+
+  it('tas eklenirse yeni duzen doner', () => {
+    const duzen = duzenOlustur([[id(a), id(b)]], SUTUN);
+    const sonra = duzenTazele(duzen, [a, b, c], SUTUN);
+    expect(sonra).not.toBe(duzen);
+    expect(duzendekiTaslar(sonra)).toContain(id(c));
+  });
+});

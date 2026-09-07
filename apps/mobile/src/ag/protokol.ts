@@ -14,10 +14,25 @@ export type { Aksiyon, OyuncuGorunumu, OyuncuId };
 
 export interface KoltukGorunumu {
   readonly no: OyuncuId;
+  /** Bot koltugunda gercek bir oyuncu kimligi degil, `bot:<koltuk>` gelir. */
   readonly oyuncuId: string;
   readonly ad: string;
+  /** Bu koltugu sunucunun botu mu oynuyor? */
+  readonly bot: boolean;
   readonly hazir: boolean;
   readonly bagli: boolean;
+}
+
+/**
+ * Bekleyen koltuk degistirme talebi.
+ *
+ * Bos koltuga gecmek talep gerektirmiyor; DOLU koltuk oturanin onayindan
+ * geciyor. Kimin nerede oturdugu oyunun kendisini degistiriyor: attigin tasi
+ * saginda oturan alir (KURALLAR.md §4/§5).
+ */
+export interface KoltukTalebiGorunumu {
+  readonly isteyenId: string;
+  readonly hedefKoltuk: OyuncuId;
 }
 
 export type MasaDurumu = 'bekliyor' | 'oynaniyor' | 'bitti';
@@ -30,6 +45,7 @@ export interface MasaGorunumu {
   readonly tur: number;
   readonly ozel: boolean;
   readonly koltuklar: readonly KoltukGorunumu[];
+  readonly koltukTalepleri: readonly KoltukTalebiGorunumu[];
   readonly puanlar: Readonly<Record<number, number>>;
 }
 
@@ -76,6 +92,14 @@ export interface OyuncuOzeti {
   readonly ad: string;
   readonly eposta: string | null;
   readonly misafirMi: boolean;
+  /**
+   * Baskasinin seni bulmasinin yolu — "KUT-7F3A9".
+   *
+   * Sunucuda TEMBEL uretiliyor (ilk arkadas ekraninda), bu yuzden yeni bir
+   * hesapta bir sure null kalabilir. Ekran o durumda kodu `/arkadas`tan
+   * geliyor kabul ediyor.
+   */
+  readonly arkadasKodu: string | null;
   readonly seviye: number;
   readonly jeton: number;
   readonly oynananEl: number;

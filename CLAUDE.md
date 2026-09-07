@@ -23,6 +23,7 @@ yoksa dur ve sor.
 
 ```
 packages/engine/    # saf kural motoru — UI yok, ağ yok, I/O yok
+packages/politika/  # oyuncu politikası — bot, otomatik dizme, süre dolunca
 packages/server/    # otoriter oyun sunucusu — Express + Socket.io + MongoDB
 apps/mobile/        # Expo uygulaması — sunucuya bağlı, online oynanıyor
 KURALLAR.md         # kuralların tek kaynağı
@@ -48,6 +49,7 @@ pnpm install                        # bağımlılıklar
 pnpm -r test                        # tüm testler
 pnpm -r typecheck                   # tip kontrolü
 pnpm --filter @kut/engine test      # yalnızca motor
+pnpm --filter @kut/politika test    # yalnızca bot/dizme/süre politikası
 pnpm --filter @kut/mobile start     # Expo — telefonda Expo Go ile aç
 pnpm --filter @kut/mobile web       # tarayıcıda önizleme
 pnpm --filter @kut/server dev       # sunucu (önce packages/server/.env)
@@ -85,19 +87,47 @@ Akış tek yerde: `src/Uygulama.tsx`.
 
 ```
 yükleniyor → giriş → lobi → bekleme odası → masa → (lobi)
+                       ├→ profil (hesap · arkadaşlar · ayarlar)
+                       ├→ masa bul
+                       └→ alıştırma (çevrimdışı masa)
 ```
 
 | Ekran | Dosya | İş |
 |---|---|---|
 | Giriş | `bilesenler/Giris.tsx` | Misafir oyna · hesap aç · giriş yap |
-| Lobi | `bilesenler/Lobi.tsx` | Hızlı oyna · masa aç · kodla katıl |
-| Bekleme | `bilesenler/Bekleme.tsx` | Masa kodu, koltuklar, hazır düğmesi |
+| Lobi | `bilesenler/Lobi.tsx` | Hızlı oyna · masa aç · kodla katıl · arkadaş şeridi |
+| Profil | `bilesenler/Profil.tsx` | Üç sekme: profil, arkadaşlar, ayarlar |
+| Arkadaşlar | `bilesenler/Arkadaslar.tsx` | Liste, istekler, kodla ekleme |
+| Bekleme | `bilesenler/Bekleme.tsx` | Masa kodu, koltuk seçimi, bot ekleme, hazır |
 | Masa | `src/Masa.tsx` | Oyunun kendisi |
+
+**Lobide hiyerarşi var, beş eşit düğme yok.** Önceki hâlinde beş düğme aynı
+ağırlıktaydı ve her birinin altında bir açıklama satırı vardı; sonuç olarak
+hiçbiri öne çıkmıyor, ekran metin doluyordu. Şimdi `HIZLI OYNA` tek başına ve
+büyük (çoğu oyuncunun istediği o), `MASA BUL` ile `ÖZEL MASA` yan yana ikincil,
+kodla katılma bir alan, `ALIŞTIRMA` en altta çizgi düğme. Açıklamalar
+düğmelerin **içine**, ikinci satıra girdi — aynı bilgi, yarısı kadar dikey yer.
+
+Sol sütun bir kimlik panosu: avatar, ad, istatistik ve **arkadaş şeridi**.
+Şeritte yalnızca **açık masası olan** arkadaşlar listeleniyor; "kim çevrimiçi"
+değil "hangi masaya oturabilirim" sorusunu cevaplıyor. Arkadaş listesinin
+çözdüğü asıl zahmet buydu — masa kodunu her oturumda yeniden paylaşmamak.
+
+`Hesap.tsx` kaldırıldı; içeriği `Profil`in AYARLAR sekmesine girdi. App
+Store'un aradığı üç şey (ad değiştirme, engel listesi, hesap silme) yerini
+korudu, üstüne parola değiştirme eklendi. Geri dönüşü olmayan işlemler
+(çıkış, hesap silme) sekmenin en altında ayrı bir bölümde: yanlışlıkla
+basılan bir düğmenin diğerlerine benzemesi kötü bir fikir.
+
+Avatar (`bilesenler/Avatar.tsx`) ad baş harflerinden üretiliyor, renk de
+addan türetiliyor — sunucuda saklanacak bir alan gerekmiyor. Görsel yükleme
+**bilerek yok**: kullanıcı üretimi görsel barındırmak, App Store 1.2'nin
+süzme/şikâyet yükümlülüğünü metinden görüntüye taşırdı.
 
 Kararı iki şey veriyor: oturum (`ag/kimlik.tsx`) ve masa
 (`ag/cevrimiciOyun.ts`). `App.tsx` yalnızca `KimlikSaglayici`yı kurar.
 
-**`ALIŞTIRMA` çevrimdışı oynanır** (`src/oyun.ts` + `src/bot.ts`): üç yer
+**`ALIŞTIRMA` çevrimdışı oynanır** (`src/oyun.ts` + `@kut/politika`): üç yer
 tutucu oyuncuyla, sunucuya hiç bağlanmadan. Duruyor çünkü oyun dört kişi
 olmadan başlamıyor; yeni bir uygulamada bu, tek başına açan kişinin boş bir
 masada beklemesi demek — App Store denetçisi de dahil (Guideline 2.1/4.2).
@@ -148,6 +178,67 @@ Misafirken hesap açılırsa üstüne biner — ilerleme kaybolmaz. Bir belge
 yalnızca bir kez yükseltilebilir; ikincisine izin vermek, cihazı eline
 geçirenin hesabı ele geçirmesi demek olurdu.
 
+**Arkadaşlık ayrı bir koleksiyonda** (`modeller/Arkadaslik.ts`), engel listesi
+gibi `Oyuncu` içinde bir dizi değil. Sebep: engelleme **tek taraflı** bir
+karar, arkadaşlık **iki taraflı** — bir istek var, bir de cevap. İsteği iki
+belgeye dağıtmak (A'nın gideni + B'nin geleni) aynı gerçeği iki yerde tutmak
+demek; biri yazılıp diğeri yazılamadığında istek tek tarafta asılı kalıyor.
+
+Çift **kimliklerin metin sırasıyla normalleştiriliyor** (`kucuk`/`buyuk`) ve
+üstünde benzersiz indeks var. İstek başına belge tutmak klasik bir yarış
+kapısı açıyordu: iki kişi aynı anda birbirine istek atarsa iki ayrı
+"bekliyor" kaydı oluşuyor ve ikisi de karşı tarafın kabulünü bekliyordu.
+Şimdi ikinci istek E11000 alıyor, servis onu "karşı taraf zaten istemiş"
+diye okuyup **arkadaşlığa çeviriyor** — ikisi de istiyorsa ayrıca onay
+istemek anlamsız.
+
+Arama **yalnızca arkadaş koduyla** (`KUT-7F3A9`). Görünen ad benzersiz değil;
+e-postayla aramak ise girilen adresin kayıtlı olup olmadığını sızdırır — adres
+toplamanın en kolay yolu olurdu. Kod paylaşmak iradi bir hareket. Kod **tembel
+üretiliyor**: hesap açılırken üretmek, kodu hiç kullanmayacak oyuncular için de
+benzersizlik sorgusu demek olurdu.
+
+Engel arkadaşlığın **önüne geçiyor**: engellenen listede görünmez, ona istek
+gönderilemez, kodla da bulunamaz. İlişki silinmiyor — engel kalkarsa arkadaşlık
+geri geliyor (App Store 1.2 "engellediklerini görüp geri alabilme").
+
+**Parola değiştirme mevcut parolayı soruyor.** Jeton 30 gün geçerli ve cihazda
+duruyor; yalnızca jetona güvenmek, telefonu bir süre eline geçiren birinin
+parolayı değiştirip hesabı devralması demek olurdu — sıfırlama e-postasının
+gitmediği tek senaryo.
+
+**Masada BOT koltuğu olabilir.** Oyun dört oyuncusuz ilerlemiyor (motor dört
+koltuk bekliyor) ama dördünün de insan olması gerekmiyor: iki arkadaş
+toplandıysa tek seçenek iki yabancı beklemek olmamalı. Masayı açan
+`masa:botDoldur` ile boş koltukları doldurur, `masa:botCikar` ile arkadaşı
+gelince yerini açar. Bot koltuğunda `Masa.koltuklar[].oyuncu` **yoktur**
+(`bot: true`) ve istemciye `bot:<koltuk>` diye sahte bir kimlik gider — gerçek
+bir oyuncu kimliğiyle karışmasın diye.
+
+Botu `MasaOturumu` oynatıyor; kararı `@kut/politika`da, çevrimdışı masadaki yer
+tutucularla **aynı kod**. Sıra süresinden ayrı, kısa bir zamanlayıcı kullanıyor
+(sıra süresi güvenlik ağı olarak duruyor). Bot, masada çalabilecek bir insan
+varken daha uzun bekliyor: talep penceresi onun hamlesiyle kapanıyor (§9 0.9)
+ve 1.4 saniye insana "istiyorum" demeye yetmez.
+
+İstatistik ve el kaydı yalnızca gerçek oyuncular için yazılıyor — `bot:2` bir
+ObjectId değil, Mongo sorgusunda hata verirdi.
+
+**Koltuk seçilebiliyor ve değiştirilebiliyor.** Kimin nerede oturduğu oyunun
+kendisini değiştiriyor: attığın taşı **sağında** oturan bedelsiz alır
+(KURALLAR.md §4) ve çalma önceliği koltuk sırasından çıkar (§5). "Atılan her
+taşı alan arkadaşımın sağına oturmak istemiyorum" gerçek bir tercih.
+
+- **Boş koltuğa geçmek** talep gerektirmiyor; `masa:koltugaGec` atomik
+  (`findOneAndUpdate` + "hedef HÂLÂ boş" filtresi — `masayaKatil`'daki aynı
+  yarış).
+- **Dolu koltuğa geçmek** oturanın onayından geçiyor: `masa:koltukTalebi` →
+  `masa:koltukCevap`. Kabul edilirse koltuklar **takas** olur.
+- Talep `Masa` belgesinde duruyor, bellekte değil: bekleyen masa sunucu yeniden
+  başlatıldığında silinmiyor (yalnızca `oynaniyor` olanlar kapanıyor).
+- Cevap verirken hedef koltuğun **hâlâ** cevaplayana ait olması aranıyor;
+  arada koltuk değiştirmiş olabilir.
+
 **Masaya oturma ATOMİK.** `masayaKatil` koltuğu `findOneAndUpdate` ile,
 "bu koltuk hâlâ boş ve masa hâlâ dolu değil" filtresiyle yazar. Önce okuyup
 sonra `save()` demek klasik oku-değiştir-yaz yarışıydı ve gerçekten yaşandı:
@@ -165,6 +256,10 @@ Denetimin aradığı üç şey koda karşılık buluyor:
 | 5.1.1(v) — hesap **uygulama içinden** silinebilmeli | `kimlikServisi.hesabiSil` · Lobi → HESAP → Hesabımı sil |
 | 1.2 — uygunsuz içeriği süz, şikâyet et, engelle | `adFiltresi.ts` · `moderasyonServisi.ts` · masada AYARLAR |
 | Gizlilik politikası ve destek URL'i | `rotalar/sayfalar.ts` — `/gizlilik`, `/kosullar`, `/destek`, `/hesap-sil` |
+
+Hesap silme **arkadaşlıkları da siliyor** (`arkadasServisi.iliskileriTemizle`):
+kalsalardı karşı tarafın listesinde adı çözülemeyen bir kayıt asılı kalır ve
+kotasından yer kaplardı.
 
 Yasal sayfalar ayrı bir site yerine sunucudan veriliyor: alan adı ve TLS
 zaten orada, ikinci bir yerde tutmak "biri güncellenir diğeri unutulur" demek.
@@ -204,7 +299,7 @@ Oyun **sunucuda** koşuyor. Ekran hiçbir kural bilmiyor; gördüğü tek şey
 src/ag/protokol.ts        # sunucu sözleşmesinin istemci kopyası
 src/ag/sunucu.ts          # adres (EXPO_PUBLIC_SUNUCU_URL)
 src/ag/depo.ts            # jeton + cihaz kimliği (SecureStore / localStorage)
-src/ag/api.ts             # REST: kayıt, giriş, misafir, ben
+src/ag/api.ts             # REST: kayıt, giriş, misafir, ben, arkadaşlık
 src/ag/kimlik.tsx         # oturum context'i; soketi açar
 src/ag/soket.ts           # tek socket.io bağlantısı, modül seviyesinde
 src/ag/cevrimiciOyun.ts   # masa + görünüm + süre → MasaSurucusu
@@ -259,6 +354,22 @@ Arayüz **landscape**'e kilitli (Okey 101 Plus düzeni):
   **aşağı sürükleyerek** çekersin. Atma ve çekme masada uçan taşla canlanır.
   Bunların ayrı `ÇEK` / `YERDEN AL` / `AT` düğmesi **yoktur** — hareket
   yeterli, düğme yan paneli şişiriyordu
+- **"ÇİFTİM VAR" bir talep değil, hamlenin kendisi** (KURALLAR.md §9 0.10).
+  Basıldığı anda taş + 1 ceza taşı oyuncuya gelir, pencere kapanır, bekleyen
+  normal talepler düşer. Düğme yalnızca atılan taşın **birebir eşi gerçekten
+  ıstakadaysa** ve oyuncu **henüz açmamışsa** açılır; ikisi de kuralın kendisi,
+  kullanıcı kolaylığı değil. Çalınan taş masadan bir anda kalktığı için
+  `gorunum.sonCalan` ile "kim çaldı" yazılıyor — yoksa atık öbeği sessizce
+  boşalıyordu ve uçan taş yanlış oyuncuya gidiyordu
+- **Atılan taşın talep penceresinin süresi yoktur** (KURALLAR.md §9 0.9).
+  Pencere, sırası gelen oyuncu hamlesini yapana kadar açık kalır ve o hamleyle
+  kapanır: yerden alırsa taş onun, desteden çekerse o ana kadar talep
+  edenlerin **en öncelikli olanı** alır (§5). Kimse talep etmediyse taş yerde
+  kalır. Ekranda geri sayım değil **kimin istediği** yazar.
+  Eskiden 3 saniyelik bir sayaç vardı ve sırası gelen oyuncuyu o kadar
+  bekletiyordu — hızlı oynayan herkesi geciktiriyor, düşünene ise yetmiyordu.
+  Sonucu kodda görünür: motor talep penceresi için **hiç saat okumuyor**,
+  `yetkiler.ts` de artık `suAn` almıyor
 - Sırası gelen oyuncunun **30 saniyesi** vardır (KURALLAR.md §9 0.4,
   `ayarlar.siraSureleriMs`). Süre iki kez başlar: sıra geçtiğinde ve her
   **taş çekmeden** sonra. Geri sayım `TUR` satırının sağında, altında ince
@@ -268,7 +379,7 @@ Arayüz **landscape**'e kilitli (Okey 101 Plus düzeni):
   10'da kalır. Kademe oyuncuya özeldir ve **yalnızca o eli kapsar**: yeni el
   dağıtıldığında herkes 30 saniyeye döner (§9 0.7).
   İş bölümü üçe ayrık — sayaç `src/oyun.ts`'te (zaman motorun dışında),
-  karar `src/sure.ts`'te (saf, testli), uygulama yine motorda
+  karar `@kut/politika`nın `sure.ts`'inde (saf, testli), uygulama yine motorda
 - **Yerden okey çekme** (KURALLAR.md §6) ekranda `OKEY AL` düğmesiyle.
   Kural motorda zaten vardı (`okeyCekilebilirMi`, `OKEY_CEK`, `AC` içindeki
   `okeyAlimi`); eksik olan projeksiyon ve arayüzdü. `viewFor` artık
@@ -310,10 +421,11 @@ Okey yerdeki neredeyse her pere işlediği için, bu ayrım olmadan kendi
 perindeki okey de yere gidiyordu. Seçim varsa niyet açıktır — ne seçildiyse o
 gider, okey dahil.
 
-Çevrimdışı sürücüde diğer üç oyuncu `src/bot.ts` ile oynuyor: çeker,
+Çevrimdışı sürücüde diğer üç oyuncu `@kut/politika`nın `bot.ts`'i ile oynuyor: çeker,
 açabiliyorsa turun şartını arayıp açar, açtıysa işler, sonra en az işe
-yarayan taşı atar. Çevrimiçi masada bot yok — dört gerçek oyuncu oturur;
-süresi dolanın yerine sunucu oynar (`packages/server/src/soket/yerineOyna.ts`).
+yarayan taşı atar. Çevrimiçi masada da aynı bot oturabilir (bkz. bot koltukları);
+masada bot koltuğu varsa onları da **aynı kod** oynatıyor
+(`packages/server/src/soket/masaOturumu.ts`), süresi dolanın yerine de yine o.
 
 Bot **alamayacağı taşı istememeli**: motor reddettiğinde durum değişmediği
 için sürücünün effect'i yeniden koşmuyor ve sıra kilitleniyor. Tur 15'te
@@ -329,7 +441,7 @@ istiyor, LLM bunu kırardı. `src/bot-simulasyon.test.ts` dört botla 16 turun
 hepsini oynatıp elin sorunsuz kapandığını ve taş sayısının korunduğunu
 doğruluyor.
 
-`src/dizme.ts` bir **kural değil**, kolaylıktır: hiçbir oyun durumu
+`@kut/politika`nın `dizme.ts`'i bir **kural değil**, kolaylıktır: hiçbir oyun durumu
 değiştirmez, geçerlilik kararını yine motora (`seriMu` / `kutMu`) sorar.
 İki kuralı var: okey kıt kaynak olduğu için önce pere dönüşecek yerlere
 harcanır, ve yalnızca **açılabilir** perler (3+ taş) gruplanır — `kirmizi1 +
@@ -354,6 +466,57 @@ Atılınca eli bitirecek taşların altında **yeşil** işaret çıkıyor. İş
 **Dikkat:** sürükleyerek atma `masayaBirak` üzerinden gidiyor ve o da `at`'i
 çağırmak zorunda. Doğrudan `AT` gönderirse tur 16 kontrolü atlanır — ilk
 denemede tam bu oldu.
+
+### Tur 16 neden kasıyordu
+
+Oyun yalnızca 16. turda, yalnızca insan oynarken donuyordu: taş çekilince
+geri sayım 10–15 saniye takılı kalıyor, atılan taş yığına gecikmeli gidiyordu.
+Botlar oynarken ya da ıstakada taş taşınırken böyle bir şey yoktu.
+
+Sebep `perlereBol`du. Her adımda kalan taşların **bütün alt kümelerini**
+üretiyordu: 14 taş için tepe seviyede ~8000 dizi, altında binlercesi daha.
+Bölünen eller hemen sonuçlandığı için uzun süre fark edilmedi; ağacın tamamı
+ancak **bölünmeyen** elde geziliyor. Üstüne `bitirenTaslar` bunu her taş için
+bir kez çağırıyor (yeşil işaretler), ekran da her `oyun:görünüm` paketinde
+yeniden hesaplıyordu — yani her rakip hamlesinde.
+
+Ölçüldü (Node, Apple Silicon): 15 taşlık el **68 ms**, çalma yüzünden büyümüş
+20 taşlık el **3.6 saniye**. Telefonda (Hermes) bunun katları.
+
+İki değişiklik, ikisi de sonucu değiştirmeden:
+
+1. **Aday perler iki dar havuzdan kuruluyor.** KURALLAR.md §2'ye göre bir
+   kütteki normal taşların hepsi aynı sayıda, bir serideki normal taşların
+   hepsi aynı renktedir. Öyleyse `ilk` taşı içeren bir per yalnızca
+   `{aynı sayı} ∪ {okey}` ve `{aynı renk} ∪ {okey}` havuzlarından kurulabilir.
+   Eleme **saf**: geçerli hiçbir per dışarıda kalmıyor.
+2. **Alt problemler belleklenİyor.** `bitirenTaslar`ın 15 araması aynı elden
+   birer taş eksik; alt problemlerinin çoğu ortak. Başarısızlıklar da bellekte
+   — zaman zaten orada harcanıyordu.
+
+Sonuç: 3679 ms → **1.1 ms**. `eldenBitme.test.ts` iki şeyi birden kovalıyor —
+budamanın doğruluğunu (rastgele ellerde hiçbir şey budamayan referans sürümle
+karşılaştırıyor) ve 250 ms'lik bir süre sınırını.
+
+### Ekran neden gereksiz yere çiziliyordu
+
+Aynı incelemede iki şey daha çıktı; ikisi de "hiçbir şey değişmemişken
+yeniden çizmek":
+
+- **200 ms'lik sayaç.** `Masa.tsx` geri sayım için saniyede beş kez state
+  güncelliyordu ve her tikte bütün masa yeniden çiziliyordu — 20+ taşlık
+  ıstaka, dört per alanı, ortadaki öbek, yan paneldeki on düğme. Sayaç
+  `bilesenler/SiraSayaci.tsx`e taşındı; tik artık yalnızca o küçük kutuya
+  dokunuyor. Talep penceresinin sayacı da §9 0.9 ile kalktığı için masada
+  **hiç saat işlemiyor**.
+- **Her pakette yeni dizi.** Çevrimiçi oyunda her `oyun:görünüm` paketi
+  yepyeni bir `istakam` dizisi getiriyor. `duzenTazele` ve seçim filtresi her
+  seferinde yeni dizi döndürdüğü için `setDuzen`/`setSecili` durumu
+  "değişmiş" sayıyor ve masayı iki kez daha çizdiriyordu — kendi ıstakamda
+  tek bir taş kımıldamamışken. İkisi de artık **değişiklik yoksa önceki
+  değeri** döndürüyor (`duzen.test.ts` bunu referans eşitliğiyle doğruluyor).
+
+`TasGorseli` `memo`lu: bir taşı seçmek diğer 25'ini ilgilendirmiyor.
 
 ### Puan tablosu
 
@@ -433,6 +596,27 @@ sabit sayan hiçbir dizi, tip veya döngü yazma.
 **6. Taşlar kimliklidir.**
 Destede her taştan iki kopya var. Her taş fiziksel örneğini temsil eden
 benzersiz bir `id` taşır; `renk + sayı` bir taşı tanımlamaya yetmez.
+
+### packages/politika
+
+Motor KURALI söyler ("bu hamle geçerli mi"), politika TERCİHİ ("hangi hamle").
+İkisi ayrı sorular:
+
+| Dosya | İş |
+|---|---|
+| `bot.ts` | Yer tutucu oyuncunun kararı — çek, aç, işle, at |
+| `dizme.ts` | Istakayı otomatik seri/küt gruplarına dizme |
+| `sure.ts` | Süre kademeleri ve süre dolunca hangi taşın atılacağı |
+
+Bu kod eskiden `apps/mobile/src/{bot,dizme,sure}.ts`teydi ve sunucuda bir de
+kopyası vardı (`soket/yerineOyna.ts`) — MIMARI.md bunu "ortak bir politika
+paketine çıkarılmalı" diye not etmişti. **Online masaya bot eklenince ikisinin
+ayrı kalması imkânsızlaştı:** sunucudaki botla çevrimdışı masadaki botun aynı
+oynaması gerekiyor.
+
+Motorun üç kuralı burada da geçerli ve `types: []` ile derlemede zorlanıyor:
+saf, rastgeleliksiz, yalnızca `viewFor` projeksiyonunu okuyor. Bot insandan
+fazlasını görmüyor.
 
 ---
 

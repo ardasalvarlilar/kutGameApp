@@ -7,14 +7,6 @@
 
 export interface KuralAyarlari {
   /**
-   * KURALLAR.md §5 talep penceresi / §9.6 (karara baglandi: 3000 ms).
-   * Tas atildiktan sonra sirasi gelen oyuncunun desteden cekmesi bu sure
-   * kadar engellenir; digerlerine garanti tepki suresi verir.
-   * Tur 15'te ayni sure yerden tas almayi da engeller (bkz. ciftCalmaHakki).
-   */
-  readonly talepPenceresiMs: number;
-
-  /**
    * KURALLAR.md §5 "Talep gorunurlugu" — sirasi gelen oyuncu digerlerinin
    * talebini gorur. Oda ayari, varsayilan acik.
    */
@@ -24,6 +16,11 @@ export interface KuralAyarlari {
    * Tur 15'e ozgu "cifti bende" hakki (KURALLAR.md 0.2, §5).
    * Atilan tasin birebir esini elinde tutan oyuncu, sirasi gelen oyuncunun
    * bedelsiz hakki dahil butun oncelikleri gecer.
+   *
+   * §9 0.10 — bu hak KUYRUGA GIRMEZ: `CIFT_TALEBI` geldigi anda tasi alir.
+   * Kuyruga girseydi sirasi gelen oyuncu ondan once davranip tasi alabilir,
+   * "her seyi gecer" sozu yalnizca yavas oynayana karsi gecerli olurdu.
+   * Hak, dort cifti indiren (acmis) oyuncuda kapanir.
    */
   readonly ciftCalmaHakki: boolean;
 
@@ -85,7 +82,6 @@ export interface KuralAyarlari {
 }
 
 export const VARSAYILAN_AYARLAR: KuralAyarlari = {
-  talepPenceresiMs: 3000,
   siraSureleriMs: [30000, 20000, 10000],
   islerTasCezasi: 50,
   talepGorunurlugu: true,

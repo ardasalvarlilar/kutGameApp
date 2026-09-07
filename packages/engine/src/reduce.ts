@@ -64,20 +64,18 @@ function elBitir(
  * KURALLAR.md §5 — talep penceresi kapandiginda tasi kim alir?
  * "Kim once bastiysa degil, kim onceliliyse alir."
  *
- * Tur 15'te (KURALLAR.md 0.2) "cifti bende" hakki her seyi geçer.
- * Normal oncelik: atan+2, sonra atan+3. atan+1 zaten sirasi gelen oyuncudur;
- * bu noktaya gelindiyse bedelsiz hakkini kullanmamis demektir.
+ * Oncelik oyun yonunde ilerler: atan+1 zaten sirasi gelen oyuncudur ve bu
+ * noktaya gelindiyse bedelsiz hakkini kullanmamis demektir; ondan sonraki
+ * iki oyuncu sirayla hak sahibi olur.
+ *
+ * Tur 15'in "cifti bende" hakki BURADA DEGIL: o talep kuyruga girmiyor,
+ * `CIFT_TALEBI` geldigi anda tasi aliyor (§9 0.10). Buraya geldiysek
+ * masadaki tas hala duruyor demektir.
  */
 export function pencereKazanani(durum: OyunDurumu): OyuncuId | null {
   const pencere = durum.pencere;
   if (pencere === null) return null;
 
-  if (durum.tur === 15 && durum.ayarlar.ciftCalmaHakki && pencere.ciftTalebi !== null) {
-    return pencere.ciftTalebi;
-  }
-
-  // Oncelik oyun yonunde ilerler: atan+1 zaten sirasi gelen oyuncudur,
-  // ondan sonraki iki oyuncu sirayla hak sahibi olur.
   for (const adim of [2, 3]) {
     const aday = siradaIleri(pencere.atan, adim);
     if (pencere.talepler.includes(aday)) return aday;
@@ -125,17 +123,15 @@ function yerePerEkle(
 
 // --- Cekme -----------------------------------------------------------------
 
-function cekDesteden(durum: OyunDurumu, oyuncu: OyuncuId, suAn: number): AksiyonSonucu {
+function cekDesteden(durum: OyunDurumu, oyuncu: OyuncuId): AksiyonSonucu {
   const engel = siraKontrol(durum, oyuncu, 'cekme');
   if (engel !== null) return hata(engel);
 
+  // KURALLAR.md §5 (§9 0.9) — pencereyi KAPATAN hamle bu. Sirasi gelen oyuncu
+  // atilan tasi almayip desteden cektigi anda, o ana kadar birikmis
+  // taleplerin en oncelikli olani tasi alir. Bekleme suresi yok: talep
+  // etmeyenin hakki da yok.
   const pencere = durum.pencere;
-  // KURALLAR.md §5.2 — sirasi gelen oyuncu, tas atildiktan sonraki pencere
-  // suresi boyunca desteden cekemez. Digerlerine garanti tepki suresi.
-  if (pencere !== null && suAn < pencere.acilisZamani + durum.ayarlar.talepPenceresiMs) {
-    return hata('pencere-suresi-dolmadi');
-  }
-
   const calan = pencereKazanani(durum);
   // Calan hem atilan tasi hem desteden bir ceza tasi alir (§5); sirasi gelen
   // oyuncu da bir tas ceker. Ikisine birden yetecek tas yoksa deste tukenmistir.
@@ -178,26 +174,21 @@ function cekDesteden(durum: OyunDurumu, oyuncu: OyuncuId, suAn: number): Aksiyon
     calinanSayisi,
     faz: 'atma',
     pencere: null,
+    sonCalan: calan,
   });
 }
 
-function cekAtiktan(durum: OyunDurumu, oyuncu: OyuncuId, suAn: number): AksiyonSonucu {
+function cekAtiktan(durum: OyunDurumu, oyuncu: OyuncuId): AksiyonSonucu {
   const engel = siraKontrol(durum, oyuncu, 'cekme');
   if (engel !== null) return hata(engel);
 
   const pencere = durum.pencere;
   if (pencere === null) return hata('talep-penceresi-kapali');
 
-  // Tur 15 (KURALLAR.md 0.2): "cifti bende" hakki sirasi gelenin bedelsiz
-  // hakkini da gecer. Pencere kapanmadan yerden tas alinamaz — alinsaydi
-  // cifti tutan oyuncunun hakki dogmadan yok olurdu.
-  if (durum.tur === 15 && durum.ayarlar.ciftCalmaHakki) {
-    if (suAn < pencere.acilisZamani + durum.ayarlar.talepPenceresiMs) {
-      return hata('pencere-suresi-dolmadi');
-    }
-    if (pencere.ciftTalebi !== null) return hata('cift-talebi-oncelikli');
-  }
-
+  // Tur 15'in "cifti bende" hakki icin burada bir kontrol YOK ve olamaz:
+  // cift talebi kuyruga girmiyor, geldigi anda tasi aliyor (§9 0.10).
+  // Cifti tutan oyuncu once davrandiysa `pencere` coktan null olur ve bu
+  // fonksiyon yukarida `talep-penceresi-kapali` ile doner.
   const yigin = durum.atikYiginlari[pencere.atan];
   const ustTas = yigin[yigin.length - 1];
   if (ustTas === undefined) return hata('atik-yigini-bos');
@@ -210,6 +201,8 @@ function cekAtiktan(durum: OyunDurumu, oyuncu: OyuncuId, suAn: number): AksiyonS
     atikSirasi: durum.atikSirasi.filter((id) => id !== ustTas.id),
     faz: 'atma',
     pencere: null,
+    // Bedelsiz hak calma degil: eksilen tasin sahibi sirasi gelen oyuncu.
+    sonCalan: null,
   });
 }
 
@@ -230,6 +223,23 @@ function calmaTalebi(durum: OyunDurumu, oyuncu: OyuncuId): AksiyonSonucu {
   });
 }
 
+/**
+ * KURALLAR.md §5 tur 15 — "cifti bende".
+ *
+ * NORMAL TALEPTEN FARKI: bu bir talep degil, HAMLENIN KENDISI. Kuyruga
+ * girmiyor, geldigi anda tasi aliyor (§9 0.10).
+ *
+ * Neden boyle: hak, sirasi gelen oyuncunun bedelsiz hakki dahil butun
+ * oncelikleri geciyor (§5). Talep kuyruga girseydi, sirasi gelen oyuncu
+ * onlardan once davranip tasi alabilirdi ve "her seyi gecer" sozu yalnizca
+ * yavas oynayana karsi gecerli olurdu. Sayac koyup herkesi bekletmek de
+ * §9 0.9 ile birlikte kalkti. Geriye tek tutarli okuma kaliyor: cift talebi
+ * ANINDA sonuclanir.
+ *
+ * Bedeli normal calmanin aynisi (§5): tas + desteden 1 ceza tasi + 5 puan,
+ * ve SIRAYI HARCAMAZ. Sirasi gelen oyuncu tasi kaptirmis olur; desteden
+ * ceker ve sirasina devam eder.
+ */
 function ciftTalebi(durum: OyunDurumu, oyuncu: OyuncuId): AksiyonSonucu {
   if (durum.faz === 'el-bitti') return hata('el-bitti');
   if (durum.tur !== 15) return hata('cift-talebi-sadece-tur-15');
@@ -239,23 +249,46 @@ function ciftTalebi(durum: OyunDurumu, oyuncu: OyuncuId): AksiyonSonucu {
   if (pencere === null) return hata('talep-penceresi-kapali');
   if (oyuncu === pencere.atan) return hata('atan-talep-edemez');
   if (oyuncu === durum.siradaki) return hata('sirasi-olan-talep-edemez');
-  if (pencere.ciftTalebi !== null) return hata('zaten-cift-talebi-var');
+
+  // §9 0.10 — dort cifti indirdikten sonra ciftle isin bitiyor. Acmis oyuncu
+  // artik seri/kut indirir (§10.2); ciftini tamamlamak icin tas calmasinin
+  // bir karsiligi kalmiyor.
+  if (durum.acmisMi[oyuncu]) return hata('zaten-actin');
 
   const yigin = durum.atikYiginlari[pencere.atan];
   const ustTas = yigin[yigin.length - 1];
-  if (ustTas === undefined) return hata('atik-yigini-bos');
+  if (ustTas === undefined || ustTas.id !== pencere.tasId) return hata('atik-yigini-bos');
 
   // Blof engeli: talep ancak tasin birebir esi gercekten istakadaysa gecerli.
   // Istemcideki tusun kapali olmasi kullanici kolayligi; asil kontrol burada.
   const esiVar = durum.istakalar[oyuncu].some((tas) => birebirEsMi(tas, ustTas));
   if (!esiVar) return hata('cift-elinde-yok');
 
-  return tamam({ ...durum, pencere: { ...pencere, ciftTalebi: oyuncu } });
+  // Calmanin bedeli desteden bir tas (§5). Deste bossa odenemez.
+  const cezaTasi = durum.deste[0];
+  if (cezaTasi === undefined) return hata('ceza-tasi-kalmadi');
+
+  return tamam({
+    ...durum,
+    deste: durum.deste.slice(1),
+    istakalar: kayitGuncelle(durum.istakalar, oyuncu, [
+      ...durum.istakalar[oyuncu],
+      ustTas,
+      cezaTasi,
+    ]),
+    atikYiginlari: kayitGuncelle(durum.atikYiginlari, pencere.atan, yigin.slice(0, -1)),
+    atikSirasi: durum.atikSirasi.filter((id) => id !== ustTas.id),
+    calinanSayisi: kayitGuncelle(durum.calinanSayisi, oyuncu, durum.calinanSayisi[oyuncu] + 1),
+    // Tas gitti: bekleyen normal talepler de duser. Pencere kapandigi icin
+    // sirasi gelen oyuncuya desteden cekmekten baska yol kalmiyor.
+    pencere: null,
+    sonCalan: oyuncu,
+  });
 }
 
 // --- Atma ------------------------------------------------------------------
 
-function at(durum: OyunDurumu, oyuncu: OyuncuId, tasId: TasId, suAn: number): AksiyonSonucu {
+function at(durum: OyunDurumu, oyuncu: OyuncuId, tasId: TasId): AksiyonSonucu {
   const engel = siraKontrol(durum, oyuncu, 'atma');
   if (engel !== null) return hata(engel);
 
@@ -302,13 +335,11 @@ function at(durum: OyunDurumu, oyuncu: OyuncuId, tasId: TasId, suAn: number): Ak
     hamleSayisi: kayitGuncelle(durum.hamleSayisi, oyuncu, durum.hamleSayisi[oyuncu] + 1),
     siradaki: sonrakiOyuncu(oyuncu),
     faz: 'cekme',
-    pencere: {
-      atan: oyuncu,
-      tasId: tas.id,
-      acilisZamani: suAn,
-      talepler: [],
-      ciftTalebi: null,
-    },
+    // §9 0.9 — pencerenin acilis ani tutulmuyor; sayac yok, kapanisi
+    // sirasi gelenin hamlesi belirliyor.
+    pencere: { atan: oyuncu, tasId: tas.id, talepler: [] },
+    // Yeni tas atildi: onceki calmanin gosterimi bitti.
+    sonCalan: null,
   });
 }
 
@@ -530,15 +561,15 @@ function bitirElden(
 export function reduce(durum: OyunDurumu, aksiyon: Aksiyon): AksiyonSonucu {
   switch (aksiyon.tip) {
     case 'CEK_DESTEDEN':
-      return cekDesteden(durum, aksiyon.oyuncu, aksiyon.suAn);
+      return cekDesteden(durum, aksiyon.oyuncu);
     case 'CEK_ATIKTAN':
-      return cekAtiktan(durum, aksiyon.oyuncu, aksiyon.suAn);
+      return cekAtiktan(durum, aksiyon.oyuncu);
     case 'CALMA_TALEBI':
       return calmaTalebi(durum, aksiyon.oyuncu);
     case 'CIFT_TALEBI':
       return ciftTalebi(durum, aksiyon.oyuncu);
     case 'AT':
-      return at(durum, aksiyon.oyuncu, aksiyon.tasId, aksiyon.suAn);
+      return at(durum, aksiyon.oyuncu, aksiyon.tasId);
     case 'AC':
       return ac(durum, aksiyon.oyuncu, aksiyon.perler, aksiyon.okeyAlimi);
     case 'ISLE':

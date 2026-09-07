@@ -64,6 +64,7 @@ function gorunumKur(p: {
     islemeYapabilirim: p.islemeYapabilirim ?? (p.acmisMi ?? false),
     okeyFirsatlarim: p.okeyFirsatlarim ?? [],
     pencere: null,
+    sonCalan: null,
     sonuc: null,
   };
 }
@@ -176,6 +177,7 @@ describe('okeyleAcilisBul — KURALLAR.md §6 istisnasi', () => {
       calinanSayisi: oyuncuKaydiOlustur(() => 0),
       islerTasSayisi: oyuncuKaydiOlustur(() => 0),
       pencere: null,
+    sonCalan: null,
       sonuc: null,
     };
     const gorunum = gorunumKur({ istakam: acilmayanEl, yer: [OKEYLI_KUT] });
