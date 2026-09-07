@@ -2,14 +2,14 @@
   "expo": {
     "name": "Küt",
     "slug": "kut",
-    "version": "1.0.0",
+    "version": "1.2",
     "orientation": "landscape",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.kut.mobile",
-      "buildNumber": "11",
+      "buildNumber": "12",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
