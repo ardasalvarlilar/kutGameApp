@@ -1,13 +1,18 @@
 # Iki asamali derleme: mobil uygulamanin KODLARI imaja girmez.
 #
-# Kaynak monorepo'da duruyor cunku sunucu ile mobil AYNI motoru paylasiyor
-# (@kut/engine). Motorun ikinci bir kopyasi olsaydi kurallar zamanla
-# birbirinden ayrilirdi — projenin en temel degeri bunun olmamasi.
+# Kaynak monorepo'da duruyor cunku sunucu ile mobil AYNI motoru VE AYNI bot
+# politikasini paylasiyor (@kut/engine, @kut/politika). Ikisinin ikinci bir
+# kopyasi olsaydi kurallar zamanla birbirinden ayrilirdi — projenin en temel
+# degeri bunun olmamasi. Yeni bir workspace paketi @kut/server'a bagimlilik
+# olarak eklendiginde BURAYA da (manifest + kaynak kopyalari) eklenmesi
+# gerekiyor; pnpm'in workspace baglantisi Docker katmanlarini otomatik takip
+# etmiyor.
 #
-# Calisan imaja giren: `dist/index.js` (motor bundle'in ICINDE) + yalnizca
-# URETIM bagimliliklari. express/socket.io/mongoose bilerek bundle'a
-# ALINMIYOR — dinamik require ve native eklenti kullaniyorlar, paketlenince
-# calismiyorlar. Motor saf TypeScript oldugu icin sorunsuz bundle'a giriyor.
+# Calisan imaja giren: `dist/index.js` (motor VE politika bundle'in ICINDE) +
+# yalnizca URETIM bagimliliklari. express/socket.io/mongoose bilerek
+# bundle'a ALINMIYOR — dinamik require ve native eklenti kullaniyorlar,
+# paketlenince calismiyorlar. Motor ve politika saf TypeScript oldugu icin
+# sorunsuz bundle'a giriyor.
 
 FROM node:22-alpine AS derleme
 WORKDIR /uygulama
@@ -17,6 +22,7 @@ RUN corepack enable
 # degistiginde yeniden kurulum yapilmasin.
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY packages/engine/package.json packages/engine/
+COPY packages/politika/package.json packages/politika/
 COPY packages/server/package.json packages/server/
 # apps/mobile'in yalnizca MANIFESTI: lockfile onu tanidigi icin dosya yoksa
 # `--frozen-lockfile` "lockfile guncel degil" diye kirilir. Kodu kopyalanmiyor
@@ -25,9 +31,10 @@ COPY apps/mobile/package.json apps/mobile/
 
 RUN pnpm install --frozen-lockfile --filter @kut/server...
 
-# Sunucu ve motorun kaynagi — apps/mobile/src hic kopyalanmiyor.
+# Sunucu, motorun ve politikanin kaynagi — apps/mobile/src hic kopyalanmiyor.
 COPY tsconfig.base.json ./
 COPY packages/engine packages/engine
+COPY packages/politika packages/politika
 COPY packages/server packages/server
 
 RUN pnpm --filter @kut/server build
