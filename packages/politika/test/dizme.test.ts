@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { normalTas, okeyTas, seriMu, type Renk, type Sayi, type Tas } from '@kut/engine';
-import { kutDiz, seriDiz, type Grup } from '../src/dizme';
+import { gruplariKimlige, kutDiz, seriDiz, type Grup } from '../src/dizme';
 
 const t = (renk: Renk, sayi: Sayi, kopya: 'a' | 'b' = 'a'): Tas => normalTas(renk, sayi, kopya);
 const ok = (kopya: 'a' | 'b' = 'a'): Tas => okeyTas(kopya);
@@ -137,5 +137,31 @@ describe('kutDiz', () => {
   it('kalanlari sayi-renk sirasiyla dizer — yakin taslar yan yana gelsin', () => {
     const el = [t('sari', 9), t('kirmizi', 2), t('mavi', 9), t('mavi', 2)];
     expect(ozet(kutDiz(el))).toEqual(['K2-M2-M9-Y9']);
+  });
+});
+
+// Gruplar ekrana KIMLIKLE gidiyor: tas nesnesi degil, `id`. Ekran duzeni
+// (`src/duzen.ts`) kimliklerle calisiyor ve ayni renk-sayinin iki kopyasi
+// birbirinden yalnizca kimlikle ayrilir (motor kurali #6).
+describe('gruplariKimlige', () => {
+  it('grup yapisini koruyarak kimliklere ceviriyor', () => {
+    const gruplar = [
+      [t('kirmizi', 4), t('kirmizi', 5), t('kirmizi', 6)],
+      [t('mavi', 9)],
+    ];
+    expect(gruplariKimlige(gruplar)).toEqual([
+      [t('kirmizi', 4).id, t('kirmizi', 5).id, t('kirmizi', 6).id],
+      [t('mavi', 9).id],
+    ]);
+  });
+
+  it('ayni renk-sayinin iki kopyasi ayri kimlik olarak cikiyor', () => {
+    const gruplar = [[t('kirmizi', 7, 'a'), t('kirmizi', 7, 'b')]];
+    const kimlikler = gruplariKimlige(gruplar);
+    expect(kimlikler[0]?.[0]).not.toBe(kimlikler[0]?.[1]);
+  });
+
+  it('bos girdi bos cikti', () => {
+    expect(gruplariKimlige([])).toEqual([]);
   });
 });

@@ -2,7 +2,7 @@
   "expo": {
     "name": "Küt",
     "slug": "kut",
-    "version": "1.2",
+    "version": "1.3",
     "orientation": "landscape",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
