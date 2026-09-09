@@ -165,7 +165,7 @@ describe('motor cozumu kabul ediyor', () => {
       calinanSayisi: { 0: 0, 1: 0, 2: 0, 3: 0 },
       islerTasSayisi: { 0: 0, 1: 0, 2: 0, 3: 0 },
       pencere: null,
-    sonCalan: null, sonuc: null,
+    sonCalan: null, sonHareketler: [], sonHareketNo: 0, sonuc: null,
     };
 
     const sonuc = reduce(durum as never, {

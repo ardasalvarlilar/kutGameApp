@@ -19,7 +19,7 @@ const silmeGirdisi = z.object({ jeton: z.string().min(1).max(255) });
 export async function bildirimJetonuKaydet(istek: Request, yanit: Response): Promise<void> {
   const cozum = jetonGirdisi.safeParse(istek.body);
   if (!cozum.success) {
-    yanit.status(400).json({ ok: false, hata: 'Geçersiz bildirim jetonu' });
+    yanit.status(400).json({ ok: false, hata: 'gecersiz-bildirim-jetonu' });
     return;
   }
   try {
@@ -37,7 +37,7 @@ export async function bildirimJetonuKaydet(istek: Request, yanit: Response): Pro
 export async function bildirimJetonuSil(istek: Request, yanit: Response): Promise<void> {
   const cozum = silmeGirdisi.safeParse(istek.body);
   if (!cozum.success) {
-    yanit.status(400).json({ ok: false, hata: 'Geçersiz bildirim jetonu' });
+    yanit.status(400).json({ ok: false, hata: 'gecersiz-bildirim-jetonu' });
     return;
   }
   await jetonSil(cozum.data.jeton);

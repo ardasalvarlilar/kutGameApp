@@ -22,6 +22,7 @@ import {
 } from 'react-native';
 import { AnaDugme, Hata } from './Alan';
 import type { AcikMasaOzeti } from '../ag/protokol';
+import { useCeviri } from '../dil';
 import { renkler } from '../tema';
 
 export interface MasaBulOzellikleri {
@@ -42,6 +43,7 @@ export function MasaBul({
   mesgul,
   hata,
 }: MasaBulOzellikleri) {
+  const t = useCeviri();
   const [masalar, setMasalar] = useState<readonly AcikMasaOzeti[] | null>(null);
   const [yukleniyor, setYukleniyor] = useState(false);
 
@@ -58,19 +60,17 @@ export function MasaBul({
     <View style={stil.govde}>
       <View style={stil.baslikSatiri}>
         <View style={stil.baslikYazi}>
-          <Text style={stil.baslik}>MASA BUL</Text>
-          <Text style={stil.altBaslik}>
-            Açık masalar — kod gerekmez, boş koltuğa otur
-          </Text>
+          <Text style={stil.baslik}>{t('masaBul.baslik')}</Text>
+          <Text style={stil.altBaslik}>{t('masaBul.altBaslik')}</Text>
         </View>
         <View style={stil.baslikDugmeler}>
           <AnaDugme
-            etiket="TAZELE"
+            etiket={t('masaBul.tazele')}
             onBas={tazele}
             aktif={!yukleniyor && !mesgul}
             tur="cizgi"
           />
-          <AnaDugme etiket="GERİ" onBas={onKapat} tur="cizgi" />
+          <AnaDugme etiket={t('masaBul.geri')} onBas={onKapat} tur="cizgi" />
         </View>
       </View>
 
@@ -79,7 +79,7 @@ export function MasaBul({
       {masalar === null && yukleniyor ? (
         <View style={stil.orta}>
           <ActivityIndicator color={renkler.vurgu} />
-          <Text style={stil.bilgi}>masalar yükleniyor</Text>
+          <Text style={stil.bilgi}>{t('masaBul.yukleniyor')}</Text>
         </View>
       ) : null}
 
@@ -87,12 +87,10 @@ export function MasaBul({
         // Bos liste cikmaz sokak degil: oyuncu buradan kendi masasini acar,
         // sonra gelen ONUN masasina oturur.
         <View style={stil.orta}>
-          <Text style={stil.bilgi}>Şu an açık masa yok</Text>
-          <Text style={stil.bilgiKucuk}>
-            Sen bir masa aç, gelenler senin masana otursun
-          </Text>
+          <Text style={stil.bilgi}>{t('masaBul.bosListe')}</Text>
+          <Text style={stil.bilgiKucuk}>{t('masaBul.bosListeIpucu')}</Text>
           <View style={stil.bosDugme}>
-            <AnaDugme etiket="AÇIK MASA AÇ" onBas={onMasaAc} aktif={!mesgul} />
+            <AnaDugme etiket={t('masaBul.masaAc')} onBas={onMasaAc} aktif={!mesgul} />
           </View>
         </View>
       ) : null}
@@ -109,23 +107,23 @@ export function MasaBul({
                 <Text style={stil.oyuncular} numberOfLines={1}>
                   {masa.oyuncular.join(' · ')}
                 </Text>
-                <Text style={stil.kod}>masa {masa.kod}</Text>
+                <Text style={stil.kod}>{t('masaBul.masaKodu', { kod: masa.kod })}</Text>
               </View>
               <View style={stil.satirSag}>
                 <Text style={stil.sayi}>
                   {masa.oyuncuSayisi}/{masa.kapasite}
                 </Text>
                 <Text style={stil.katilYazi}>
-                  {masa.benimMi ? 'masana dön' : 'katıl'}
+                  {t(masa.benimMi ? 'masaBul.masanaDon' : 'masaBul.katil')}
                 </Text>
               </View>
             </Pressable>
           ))}
 
           <View style={stil.listeAlti}>
-            <Text style={stil.bilgiKucuk}>Beğenmedin mi? Kendi masanı aç</Text>
+            <Text style={stil.bilgiKucuk}>{t('masaBul.begenmedin')}</Text>
             <AnaDugme
-              etiket="AÇIK MASA AÇ"
+              etiket={t('masaBul.masaAc')}
               onBas={onMasaAc}
               aktif={!mesgul}
               tur="sade"

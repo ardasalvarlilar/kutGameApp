@@ -22,16 +22,20 @@ import { Alan, AnaDugme, Hata } from './Alan';
 import { Avatar } from './Avatar';
 import type { ArkadasDurumu, BulunanOyuncu } from '../ag/api';
 import { useKimlik } from '../ag/kimlik';
+import { useCeviri, type MetinAnahtari } from '../dil';
 import { sonGorulmeMetni } from '../zaman';
 import { renkler } from '../tema';
 
 /** Arama sonucundaki iliskiye gore ne yazacagi. */
-const ILISKI_METINLERI: Record<BulunanOyuncu['iliski'], string> = {
-  yok: '',
-  bekliyor: 'İstek gönderildi, cevap bekleniyor',
-  'istek-geldi': 'Sana istek göndermiş — aşağıdan kabul et',
-  arkadas: 'Zaten arkadaşsınız',
-  ben: 'Bu senin kendi kodun',
+/** Iliski durumu -> sozluk anahtari. `yok` icin metin yok: satir bos kalir. */
+const ILISKI_ANAHTARLARI: Record<
+  Exclude<BulunanOyuncu['iliski'], 'yok'>,
+  MetinAnahtari
+> = {
+  bekliyor: 'iliski.bekliyor',
+  'istek-geldi': 'iliski.istek-geldi',
+  arkadas: 'iliski.arkadas',
+  ben: 'iliski.ben',
 };
 
 function Satir({
@@ -98,6 +102,7 @@ export interface ArkadaslarOzellikleri {
 
 export function Arkadaslar({ onMasayaKatil }: ArkadaslarOzellikleri) {
   const kimlik = useKimlik();
+  const t = useCeviri();
   const [kod, setKod] = useState('');
   const [bulunan, setBulunan] = useState<BulunanOyuncu | null>(null);
   const [arandi, setArandi] = useState(false);
@@ -148,7 +153,7 @@ export function Arkadaslar({ onMasayaKatil }: ArkadaslarOzellikleri) {
   if (durum === null) {
     return (
       <View style={stil.govde}>
-        <Text style={stil.bos}>Arkadaş listesi yükleniyor…</Text>
+        <Text style={stil.bos}>{t('arkadas.yukleniyor')}</Text>
       </View>
     );
   }
@@ -157,17 +162,17 @@ export function Arkadaslar({ onMasayaKatil }: ArkadaslarOzellikleri) {
     <ScrollView contentContainerStyle={stil.govde} keyboardShouldPersistTaps="handled">
       {/* --- Kendi kodum --------------------------------------------------- */}
       <View style={stil.kodKutusu}>
-        <Text style={stil.bolum}>SENİN KODUN</Text>
+        <Text style={stil.bolum}>{t('arkadas.seninKodun')}</Text>
         <Text style={stil.kodum} selectable>
           {durum.kodum}
         </Text>
-        <Text style={stil.ipucu}>Bu kodu paylaş; arkadaşın seni buradan ekleyebilir.</Text>
+        <Text style={stil.ipucu}>{t('arkadas.kodIpucu')}</Text>
       </View>
 
       {/* --- Kodla ekleme -------------------------------------------------- */}
-      <Text style={stil.bolum}>ARKADAŞ EKLE</Text>
+      <Text style={stil.bolum}>{t('arkadas.ekleBaslik')}</Text>
       <Alan
-        etiket="Arkadaşının kodu"
+        etiket={t('arkadas.kodAlani')}
         value={kod}
         onChangeText={(yazi) => setKod(yazi.toLocaleUpperCase('tr-TR'))}
         placeholder="KUT-7F3A9"
@@ -177,7 +182,7 @@ export function Arkadaslar({ onMasayaKatil }: ArkadaslarOzellikleri) {
         returnKeyType="search"
       />
       <AnaDugme
-        etiket="ARA"
+        etiket={t('arkadas.ara')}
         onBas={() => void ara()}
         aktif={kod.trim().length >= 3 && !bekliyor}
         bekliyor={bekliyor}
@@ -185,16 +190,19 @@ export function Arkadaslar({ onMasayaKatil }: ArkadaslarOzellikleri) {
       />
 
       {arandi && bulunan === null && hata === null ? (
-        <Text style={stil.bos}>Bu kodla bir oyuncu bulunamadı.</Text>
+        <Text style={stil.bos}>{t('arkadas.bulunamadi')}</Text>
       ) : null}
 
       {bulunan !== null ? (
-        <Satir ad={bulunan.ad} altYazi={ILISKI_METINLERI[bulunan.iliski]}>
+        <Satir
+          ad={bulunan.ad}
+          altYazi={bulunan.iliski === 'yok' ? '' : t(ILISKI_ANAHTARLARI[bulunan.iliski])}
+        >
           {bulunan.iliski === 'yok' ? (
-            <KucukDugme etiket="EKLE" tur="vurgu" onBas={() => void ekle(bulunan.id)} />
+            <KucukDugme etiket={t('arkadas.ekle')} tur="vurgu" onBas={() => void ekle(bulunan.id)} />
           ) : bulunan.iliski === 'istek-geldi' ? (
             <KucukDugme
-              etiket="KABUL"
+              etiket={t('arkadas.kabul')}
               tur="vurgu"
               onBas={() => void calistir(() => kimlik.arkadasKabul(bulunan.id))}
             />
@@ -207,16 +215,16 @@ export function Arkadaslar({ onMasayaKatil }: ArkadaslarOzellikleri) {
       {/* --- Gelen istekler ------------------------------------------------ */}
       {durum.gelenIstekler.length > 0 ? (
         <>
-          <Text style={stil.bolum}>GELEN İSTEKLER</Text>
+          <Text style={stil.bolum}>{t('arkadas.gelenIstekler')}</Text>
           {durum.gelenIstekler.map((kisi) => (
-            <Satir key={kisi.id} ad={kisi.ad} altYazi={sonGorulmeMetni(kisi.zaman, an)}>
+            <Satir key={kisi.id} ad={kisi.ad} altYazi={sonGorulmeMetni(kisi.zaman, an, t)}>
               <KucukDugme
-                etiket="KABUL"
+                etiket={t('arkadas.kabul')}
                 tur="vurgu"
                 onBas={() => void calistir(() => kimlik.arkadasKabul(kisi.id))}
               />
               <KucukDugme
-                etiket="SİL"
+                etiket={t('arkadas.sil')}
                 onBas={() => void calistir(() => kimlik.arkadasSil(kisi.id))}
               />
             </Satir>
@@ -225,9 +233,9 @@ export function Arkadaslar({ onMasayaKatil }: ArkadaslarOzellikleri) {
       ) : null}
 
       {/* --- Arkadaslar ---------------------------------------------------- */}
-      <Text style={stil.bolum}>ARKADAŞLARIN ({durum.arkadaslar.length})</Text>
+      <Text style={stil.bolum}>{t('arkadas.listeBaslik', { sayi: durum.arkadaslar.length })}</Text>
       {durum.arkadaslar.length === 0 ? (
-        <Text style={stil.bos}>Henüz kimseyi eklemedin.</Text>
+        <Text style={stil.bos}>{t('arkadas.kimseYok')}</Text>
       ) : (
         durum.arkadaslar.map((kisi) => (
           <Satir
@@ -235,19 +243,19 @@ export function Arkadaslar({ onMasayaKatil }: ArkadaslarOzellikleri) {
             ad={kisi.ad}
             altYazi={
               kisi.masaKodu !== null
-                ? `masası açık · ${kisi.masaKodu}`
-                : sonGorulmeMetni(kisi.sonGorulme, an)
+                ? t('arkadas.masasiAcik', { kod: kisi.masaKodu })
+                : sonGorulmeMetni(kisi.sonGorulme, an, t)
             }
           >
             {kisi.masaKodu !== null ? (
               <KucukDugme
-                etiket="KATIL"
+                etiket={t('arkadas.katil')}
                 tur="vurgu"
                 onBas={() => onMasayaKatil(kisi.masaKodu as string)}
               />
             ) : null}
             <KucukDugme
-              etiket="ÇIKAR"
+              etiket={t('arkadas.cikar')}
               tur="tehlike"
               onBas={() => void calistir(() => kimlik.arkadasSil(kisi.id))}
             />
@@ -258,11 +266,11 @@ export function Arkadaslar({ onMasayaKatil }: ArkadaslarOzellikleri) {
       {/* --- Giden istekler ------------------------------------------------ */}
       {durum.gidenIstekler.length > 0 ? (
         <>
-          <Text style={stil.bolum}>GÖNDERDİKLERİN</Text>
+          <Text style={stil.bolum}>{t('arkadas.gonderdiklerin')}</Text>
           {durum.gidenIstekler.map((kisi) => (
-            <Satir key={kisi.id} ad={kisi.ad} altYazi="cevap bekleniyor">
+            <Satir key={kisi.id} ad={kisi.ad} altYazi={t('arkadas.cevapBekleniyor')}>
               <KucukDugme
-                etiket="VAZGEÇ"
+                etiket={t('arkadas.vazgec')}
                 onBas={() => void calistir(() => kimlik.arkadasSil(kisi.id))}
               />
             </Satir>

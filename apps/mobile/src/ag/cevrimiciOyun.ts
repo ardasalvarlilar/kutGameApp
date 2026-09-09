@@ -21,7 +21,6 @@ import {
   type OyuncuId,
   type OyuncuKaydi,
 } from '@kut/engine';
-import { hataMetni } from '../hataMetinleri';
 import type { MasaSurucusu } from '../surucu';
 import { sor, type Socket } from './soket';
 import type {
@@ -138,7 +137,8 @@ export function useCevrimiciMasa(soket: Socket | null, bagli: boolean): Cevrimic
     };
 
     const oyunHatasiGeldi = ({ reason }: HataVerisi): void => {
-      setOyunHatasi(hataMetni(reason) ?? reason);
+      // Ham kod; ceviriyi ekran yapiyor, dil degisince metin de degissin diye.
+      setOyunHatasi(reason);
     };
 
     const ayrildi = ({ sebep }: { sebep: string }): void => {

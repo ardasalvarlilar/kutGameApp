@@ -5,6 +5,7 @@ import type { Aksiyon, AksiyonSonucu, HataKodu } from './aksiyonlar';
 import {
   birTurDonduMu,
   yerPeriBul,
+  type TasHareketiGovdesi,
   type Faz,
   type OyunDurumu,
   type YerPeri,
@@ -44,6 +45,39 @@ function siraKontrol(durum: OyunDurumu, oyuncu: OyuncuId, beklenen: Faz): HataKo
   if (durum.siradaki !== oyuncu) return 'sira-sende-degil';
   if (durum.faz !== beklenen) return beklenen === 'cekme' ? 'zaten-cektin' : 'once-cekmelisin';
   return null;
+}
+
+/**
+ * Kac hareket saklaniyor.
+ *
+ * Liste silinmedigi icin bir sinir gerekiyor. Bir sirada en fazla dort hareket
+ * oluyor (cekis + calanin tasi + ceza + atis), araya isleme de girse sekiz
+ * fazlasiyla yetiyor; istemci arada bir paket kacirsa bile animasyonu
+ * yakalayabilsin diye biraz genis tutuldu.
+ */
+const HAREKET_HAFIZASI = 8;
+
+/**
+ * Hareketleri sira numarasi vererek listeye EKLER.
+ *
+ * Ustune yazmiyor: surucu bir sirayi tek seferde oynuyor (cek → isle → at) ve
+ * ekrana yalnizca son durum ulasiyor. Ustune yazsaydi isleme cekisi, atis da
+ * islemeyi silerdi; sifirlasaydi hicbiri ekrana varamazdi (ilk yazimda oldu).
+ */
+function hareketlerle(
+  durum: OyunDurumu,
+  yeniler: readonly TasHareketiGovdesi[],
+): AksiyonSonucu {
+  if (yeniler.length === 0) return tamam(durum);
+
+  let sira = durum.sonHareketNo;
+  const damgali = yeniler.map((hareket) => ({ ...hareket, sira: ++sira }));
+
+  return tamam({
+    ...durum,
+    sonHareketler: [...durum.sonHareketler, ...damgali].slice(-HAREKET_HAFIZASI),
+    sonHareketNo: sira,
+  });
 }
 
 function elBitir(
@@ -106,6 +140,24 @@ function gruplariCozumle(
   return { ok: true, perler };
 }
 
+/**
+ * Yeni inen perlerden ekran hareketi uretir.
+ *
+ * `yerePerEkle` kimlikleri `durum.sonrakiPerId`den itibaren veriyor; yeni
+ * olanlar bu esigin ustundekiler. Ekran tasi oyuncunun koltugundan PERIN
+ * KENDISINE ucuruyor — per o render'da zaten cizilmis oluyor, dolayisiyla
+ * konumu olculebiliyor.
+ */
+function indirmeHareketleri(
+  oyuncu: OyuncuId,
+  yeniYer: readonly YerPeri[],
+  ilkYeniPerId: number,
+): TasHareketiGovdesi[] {
+  return yeniYer
+    .filter((per) => per.id >= ilkYeniPerId)
+    .map((per) => ({ tip: 'indirme', oyuncu, perId: per.id, taslar: per.taslar }));
+}
+
 function yerePerEkle(
   durum: OyunDurumu,
   sahibi: OyuncuId,
@@ -146,11 +198,14 @@ function cekDesteden(durum: OyunDurumu, oyuncu: OyuncuId): AksiyonSonucu {
   let atikYiginlari = durum.atikYiginlari;
   let atikSirasi = durum.atikSirasi;
   let calinanSayisi = durum.calinanSayisi;
+  /** Calana giden tas — animasyon olayinda ACIK gosteriliyor, herkes gordu. */
+  let calinanTas: Tas | null = null;
 
   if (calan !== null && pencere !== null) {
     const yigin = atikYiginlari[pencere.atan];
     const ustTas = yigin[yigin.length - 1];
     if (ustTas === undefined || ustTas.id !== pencere.tasId) return hata('atik-yigini-bos');
+    calinanTas = ustTas;
 
     const cezaTasi = deste[0] as Tas;
     deste = deste.slice(1);
@@ -165,17 +220,37 @@ function cekDesteden(durum: OyunDurumu, oyuncu: OyuncuId): AksiyonSonucu {
   deste = deste.slice(1);
   istakalar = kayitGuncelle(istakalar, oyuncu, [...istakalar[oyuncu], cekilen]);
 
-  return tamam({
-    ...durum,
-    deste,
-    istakalar,
-    atikYiginlari,
-    atikSirasi,
-    calinanSayisi,
-    faz: 'atma',
-    pencere: null,
-    sonCalan: calan,
-  });
+  // Ekran icin: bu TEK aksiyon uc ayri tas hareketi uretebiliyor. Sirasi
+  // onemli — once pencereyi kapatan cekis, sonra calanin aldigi tas, en son
+  // onun ceza tasi. Istemci kuyrugu bu sirayla oynatiyor.
+  const olaylar: TasHareketiGovdesi[] = [
+    { tip: 'cekim', oyuncu, kaynak: 'deste', tas: null, kimden: null },
+  ];
+  if (calan !== null && pencere !== null && calinanTas !== null) {
+    olaylar.push({
+      tip: 'cekim',
+      oyuncu: calan,
+      kaynak: 'calma',
+      tas: calinanTas,
+      kimden: pencere.atan,
+    });
+    olaylar.push({ tip: 'cekim', oyuncu: calan, kaynak: 'ceza', tas: null, kimden: null });
+  }
+
+  return hareketlerle(
+    {
+      ...durum,
+      deste,
+      istakalar,
+      atikYiginlari,
+      atikSirasi,
+      calinanSayisi,
+      faz: 'atma',
+      pencere: null,
+      sonCalan: calan,
+    },
+    olaylar,
+  );
 }
 
 function cekAtiktan(durum: OyunDurumu, oyuncu: OyuncuId): AksiyonSonucu {
@@ -194,16 +269,20 @@ function cekAtiktan(durum: OyunDurumu, oyuncu: OyuncuId): AksiyonSonucu {
   if (ustTas === undefined) return hata('atik-yigini-bos');
 
   // §5.3 — sirasi gelen tasi alirsa is biter, talepler duser.
-  return tamam({
-    ...durum,
-    istakalar: kayitGuncelle(durum.istakalar, oyuncu, [...durum.istakalar[oyuncu], ustTas]),
-    atikYiginlari: kayitGuncelle(durum.atikYiginlari, pencere.atan, yigin.slice(0, -1)),
-    atikSirasi: durum.atikSirasi.filter((id) => id !== ustTas.id),
-    faz: 'atma',
-    pencere: null,
-    // Bedelsiz hak calma degil: eksilen tasin sahibi sirasi gelen oyuncu.
-    sonCalan: null,
-  });
+  return hareketlerle(
+    {
+      ...durum,
+      istakalar: kayitGuncelle(durum.istakalar, oyuncu, [...durum.istakalar[oyuncu], ustTas]),
+      atikYiginlari: kayitGuncelle(durum.atikYiginlari, pencere.atan, yigin.slice(0, -1)),
+      atikSirasi: durum.atikSirasi.filter((id) => id !== ustTas.id),
+      faz: 'atma',
+      pencere: null,
+      // Bedelsiz hak calma degil: eksilen tasin sahibi sirasi gelen oyuncu.
+      sonCalan: null,
+    },
+    // Tas masada ACIK duruyordu; kapali ucurmak "nereye gitti"yi gizlerdi.
+    [{ tip: 'cekim', oyuncu, kaynak: 'atik', tas: ustTas, kimden: pencere.atan }],
+  );
 }
 
 // --- Talepler --------------------------------------------------------------
@@ -268,22 +347,28 @@ function ciftTalebi(durum: OyunDurumu, oyuncu: OyuncuId): AksiyonSonucu {
   const cezaTasi = durum.deste[0];
   if (cezaTasi === undefined) return hata('ceza-tasi-kalmadi');
 
-  return tamam({
-    ...durum,
-    deste: durum.deste.slice(1),
-    istakalar: kayitGuncelle(durum.istakalar, oyuncu, [
-      ...durum.istakalar[oyuncu],
-      ustTas,
-      cezaTasi,
-    ]),
-    atikYiginlari: kayitGuncelle(durum.atikYiginlari, pencere.atan, yigin.slice(0, -1)),
-    atikSirasi: durum.atikSirasi.filter((id) => id !== ustTas.id),
-    calinanSayisi: kayitGuncelle(durum.calinanSayisi, oyuncu, durum.calinanSayisi[oyuncu] + 1),
-    // Tas gitti: bekleyen normal talepler de duser. Pencere kapandigi icin
-    // sirasi gelen oyuncuya desteden cekmekten baska yol kalmiyor.
-    pencere: null,
-    sonCalan: oyuncu,
-  });
+  return hareketlerle(
+    {
+      ...durum,
+      deste: durum.deste.slice(1),
+      istakalar: kayitGuncelle(durum.istakalar, oyuncu, [
+        ...durum.istakalar[oyuncu],
+        ustTas,
+        cezaTasi,
+      ]),
+      atikYiginlari: kayitGuncelle(durum.atikYiginlari, pencere.atan, yigin.slice(0, -1)),
+      atikSirasi: durum.atikSirasi.filter((id) => id !== ustTas.id),
+      calinanSayisi: kayitGuncelle(durum.calinanSayisi, oyuncu, durum.calinanSayisi[oyuncu] + 1),
+      // Tas gitti: bekleyen normal talepler de duser. Pencere kapandigi icin
+      // sirasi gelen oyuncuya desteden cekmekten baska yol kalmiyor.
+      pencere: null,
+      sonCalan: oyuncu,
+    },
+    [
+      { tip: 'cekim', oyuncu, kaynak: 'calma', tas: ustTas, kimden: pencere.atan },
+      { tip: 'cekim', oyuncu, kaynak: 'ceza', tas: null, kimden: null },
+    ],
+  );
 }
 
 // --- Atma ------------------------------------------------------------------
@@ -324,23 +409,31 @@ function at(durum: OyunDurumu, oyuncu: OyuncuId, tasId: TasId): AksiyonSonucu {
     atikSirasi: [...durum.atikSirasi, tas.id],
   };
 
+  // Atis da bir hareket: ayni listede oldugu icin cekisten SONRA sira
+  // aliyor. Ekran eskiden atisi atik yigininin buyumesinden cikariyordu ve
+  // iki ayri effect'in tanim sirasi yuzunden atis cekisten once oynuyordu.
+  const atmaHareketi = { tip: 'atma', oyuncu, tas } as const;
+
   // §7 — tum taslarini indirmis ve son tasini ortaya atmis oyuncu eli bitirir.
   // §8 — "okeyle bitti" = ortaya atilan son tasin okey olmasi.
   if (bitiriyor) {
-    return tamam(elBitir(araDurum, 'normal', oyuncu, okeyMi(tas)));
+    return hareketlerle(elBitir(araDurum, 'normal', oyuncu, okeyMi(tas)), [atmaHareketi]);
   }
 
-  return tamam({
-    ...araDurum,
-    hamleSayisi: kayitGuncelle(durum.hamleSayisi, oyuncu, durum.hamleSayisi[oyuncu] + 1),
-    siradaki: sonrakiOyuncu(oyuncu),
-    faz: 'cekme',
-    // §9 0.9 — pencerenin acilis ani tutulmuyor; sayac yok, kapanisi
-    // sirasi gelenin hamlesi belirliyor.
-    pencere: { atan: oyuncu, tasId: tas.id, talepler: [] },
-    // Yeni tas atildi: onceki calmanin gosterimi bitti.
-    sonCalan: null,
-  });
+  return hareketlerle(
+    {
+      ...araDurum,
+      hamleSayisi: kayitGuncelle(durum.hamleSayisi, oyuncu, durum.hamleSayisi[oyuncu] + 1),
+      siradaki: sonrakiOyuncu(oyuncu),
+      faz: 'cekme',
+      // §9 0.9 — pencerenin acilis ani tutulmuyor; sayac yok, kapanisi
+      // sirasi gelenin hamlesi belirliyor.
+      pencere: { atan: oyuncu, tasId: tas.id, talepler: [] },
+      // Yeni tas atildi: onceki calmanin gosterimi bitti.
+      sonCalan: null,
+    },
+    [atmaHareketi],
+  );
 }
 
 // --- Acma, isleme, okey cekme ---------------------------------------------
@@ -363,6 +456,8 @@ function ac(
 
   let istaka = durum.istakalar[oyuncu];
   let yer = durum.yer;
+  /** §6 istisnasi: okeyin yerine YERE konan taslar — onlar da ucuyor. */
+  let okeyeVerilen: readonly Tas[] = [];
 
   if (okeyAlimi !== null) {
     // §6 istisnasi — hic acmamis oyuncu, okeyi alip ayni hamlede acabilir.
@@ -374,6 +469,7 @@ function ac(
     if (gercekler === null) return hata('tas-elinde-yok');
     if (!okeyCekilebilirMi(per, okeyAlimi.okeyTasId, gercekler)) return hata('okey-yerine-gecemez');
 
+    okeyeVerilen = gercekler;
     istaka = [...tasCikar(istaka, gercekler.map((tas) => tas.id)), okey];
     yer = yer.map((p) =>
       p.id === per.id
@@ -401,15 +497,31 @@ function ac(
 
   const eklenen = yerePerEkle(durum, oyuncu, cozum.perler, yer);
 
-  return tamam({
-    ...durum,
-    istakalar: kayitGuncelle(durum.istakalar, oyuncu, kalan),
-    yer: eklenen.yer,
-    sonrakiPerId: eklenen.sonrakiPerId,
-    acmisMi: kayitGuncelle(durum.acmisMi, oyuncu, true),
-    // §6 — acilis hamlesinde isleme yok; bir tur donmesi gerekir.
-    acilisHamlesi: kayitGuncelle(durum.acilisHamlesi, oyuncu, durum.hamleSayisi[oyuncu]),
-  });
+  // Once okeyin yerine konan taslar (varsa), sonra inen perler: oyuncunun
+  // yaptigi sira bu.
+  const hareketler: TasHareketiGovdesi[] = [];
+  if (okeyAlimi !== null && okeyeVerilen.length > 0) {
+    hareketler.push({
+      tip: 'isleme',
+      oyuncu,
+      perId: okeyAlimi.perId,
+      taslar: okeyeVerilen,
+    });
+  }
+  hareketler.push(...indirmeHareketleri(oyuncu, eklenen.yer, durum.sonrakiPerId));
+
+  return hareketlerle(
+    {
+      ...durum,
+      istakalar: kayitGuncelle(durum.istakalar, oyuncu, kalan),
+      yer: eklenen.yer,
+      sonrakiPerId: eklenen.sonrakiPerId,
+      acmisMi: kayitGuncelle(durum.acmisMi, oyuncu, true),
+      // §6 — acilis hamlesinde isleme yok; bir tur donmesi gerekir.
+      acilisHamlesi: kayitGuncelle(durum.acilisHamlesi, oyuncu, durum.hamleSayisi[oyuncu]),
+    },
+    hareketler,
+  );
 }
 
 function islemeIzni(durum: OyunDurumu, oyuncu: OyuncuId): HataKodu | null {
@@ -447,11 +559,16 @@ function isle(
   const kalan = tasCikar(istaka, tasIdler);
   if (kalan.length === 0) return hata('son-tas-atilmali');
 
-  return tamam({
-    ...durum,
-    istakalar: kayitGuncelle(durum.istakalar, oyuncu, kalan),
-    yer: durum.yer.map((p) => (p.id === per.id ? { ...p, taslar: sonuc.per.taslar } : p)),
-  });
+  return hareketlerle(
+    {
+      ...durum,
+      istakalar: kayitGuncelle(durum.istakalar, oyuncu, kalan),
+      yer: durum.yer.map((p) => (p.id === per.id ? { ...p, taslar: sonuc.per.taslar } : p)),
+    },
+    // Ekran icin: tas oyuncunun istakasindan CIKIP hedef pere gidiyor.
+    // Islenen taslar herkesin gordugu taslar — acik ucuyorlar.
+    [{ tip: 'isleme', oyuncu, perId: per.id, taslar: eklenecek }],
+  );
 }
 
 function perIndir(
@@ -474,12 +591,15 @@ function perIndir(
 
   const eklenen = yerePerEkle(durum, oyuncu, cozum.perler, durum.yer);
 
-  return tamam({
-    ...durum,
-    istakalar: kayitGuncelle(durum.istakalar, oyuncu, kalan),
-    yer: eklenen.yer,
-    sonrakiPerId: eklenen.sonrakiPerId,
-  });
+  return hareketlerle(
+    {
+      ...durum,
+      istakalar: kayitGuncelle(durum.istakalar, oyuncu, kalan),
+      yer: eklenen.yer,
+      sonrakiPerId: eklenen.sonrakiPerId,
+    },
+    indirmeHareketleri(oyuncu, eklenen.yer, durum.sonrakiPerId),
+  );
 }
 
 function okeyCek(
@@ -505,18 +625,24 @@ function okeyCek(
   if (gercekler === null) return hata('tas-elinde-yok');
   if (!okeyCekilebilirMi(per, okeyTasId, gercekler)) return hata('okey-yerine-gecemez');
 
-  return tamam({
-    ...durum,
-    istakalar: kayitGuncelle(durum.istakalar, oyuncu, [
-      ...tasCikar(istaka, gercekler.map((tas) => tas.id)),
-      okey,
-    ]),
-    yer: durum.yer.map((p) =>
-      p.id === per.id
-        ? { ...p, taslar: [...p.taslar.filter((t) => t.id !== okeyTasId), ...gercekler] }
-        : p,
-    ),
-  });
+  return hareketlerle(
+    {
+      ...durum,
+      istakalar: kayitGuncelle(durum.istakalar, oyuncu, [
+        ...tasCikar(istaka, gercekler.map((tas) => tas.id)),
+        okey,
+      ]),
+      yer: durum.yer.map((p) =>
+        p.id === per.id
+          ? { ...p, taslar: [...p.taslar.filter((t) => t.id !== okeyTasId), ...gercekler] }
+          : p,
+      ),
+    },
+    // Okeyin YERINE konan taslar ucuyor. Okeyin kendisinin perden istakaya
+    // donusu icin ayri bir hareket YOK: ucus tipleri ortadan/oyuncuya ya da
+    // oyuncudan pere gidiyor, "perden oyuncuya" diye bir yon henuz yok.
+    [{ tip: 'isleme', oyuncu, perId: per.id, taslar: gercekler }],
+  );
 }
 
 function bitirElden(
@@ -553,7 +679,11 @@ function bitirElden(
     atikSirasi: [...durum.atikSirasi, atilan.id],
   };
 
-  return tamam(elBitir(araDurum, 'normal', oyuncu, okeyMi(atilan)));
+  // Tur 16'da yere per inmiyor ama SON TAS yine ortaya atiliyor (§7):
+  // atis animasyonu burada da olmali.
+  return hareketlerle(elBitir(araDurum, 'normal', oyuncu, okeyMi(atilan)), [
+    { tip: 'atma', oyuncu, tas: atilan },
+  ]);
 }
 
 // --- Indirgeyici -----------------------------------------------------------

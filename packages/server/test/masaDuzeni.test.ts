@@ -202,7 +202,7 @@ describe.skipIf(!mongoVar)('bot koltuklari', () => {
 
       const sonuc = await sor(arkadas!, 'masa:botDoldur');
       expect(sonuc.ok).toBe(false);
-      if (!sonuc.ok) expect(sonuc.hata).toContain('masayı açan');
+      if (!sonuc.ok) expect(sonuc.hata).toBe('masa-sahibi-degilsin');
     } finally {
       kapat([sahip!, arkadas!]);
     }
@@ -350,4 +350,67 @@ describe.skipIf(!mongoVar)('koltuk secme ve degistirme', () => {
       kapat([sahip!, arkadas!]);
     }
   }, 30_000);
+});
+
+/**
+ * Oyun SURERKEN masadan ayrilma.
+ *
+ * Bu bir hatanin testi: "masadan cikamiyorum". Koltuk oyuncunun ustunde
+ * birakiliyordu (MIMARI.md §3, dort koltuk dolu olmali) ve iki sonucu vardi:
+ *
+ *  1. `oyun:gorunum` masa odasina degil KISISEL odaya gidiyor; soketi masa
+ *     odasindan cikarmak paketleri kesmiyordu. Ekran lobiye donuyor, ilk
+ *     gorunum paketinde masaya geri sicriyordu.
+ *  2. Koltuk durdugu icin `acikMasam` hala o masayi donduruyor, oyuncu
+ *     "Zaten bir masadasin" ile yeni masa da acamiyordu.
+ *
+ * Cozum: koltuk BOTA devrediliyor. Test ucunu de kovaliyor.
+ */
+describe.skipIf(!mongoVar)('oyun sirasinda masadan ayrilma', () => {
+  it('koltuk bota devrediliyor, gorunum kesiliyor, oyuncu serbest kaliyor', async () => {
+    const [sahip, arkadas] = await soketler('cik-bot', 2);
+    try {
+      const kurulum = await sor<{ masa: MasaGorunumu }>(sahip!, 'masa:kur');
+      expect(kurulum.ok).toBe(true);
+      if (!kurulum.ok) return;
+      await sor(arkadas!, 'masa:katil', { kod: kurulum.veri.masa.kod });
+
+      // Gorunumu botlar oturmadan once dinliyoruz; el aninda basliyor.
+      const ilkGorunum = olayBekle<{ gorunum: OyuncuGorunumu }>(arkadas!, 'oyun:gorunum');
+      const doldur = await sor(sahip!, 'masa:botDoldur');
+      expect(doldur.ok).toBe(true);
+      const benimKoltuk = (await ilkGorunum).gorunum.ben;
+
+      const cikis = await sor(arkadas!, 'masa:cik');
+      expect(cikis.ok).toBe(true);
+
+      // 1. Koltuk bosalmadi, BOT oldu — motor dort oyuncuyla devam ediyor.
+      //    Yayin olayini beklemek yerine durumu SORUYORUZ: masada baska
+      //    sebeplerle de `masa:durum` yayini olabiliyor, yakalanan paketin
+      //    cikistan sonraki oldugu garanti degil.
+      const sonrasi = await sor<{ masa: MasaGorunumu }>(sahip!, 'masa:benim');
+      expect(sonrasi.ok).toBe(true);
+      if (!sonrasi.ok) return;
+      const guncel = sonrasi.veri.masa;
+      expect(guncel.koltuklar).toHaveLength(4);
+      const devredilen = koltuk(guncel, benimKoltuk);
+      expect(devredilen?.bot).toBe(true);
+      expect(devredilen?.oyuncuId).toBe(`bot:${benimKoltuk}`);
+
+      // 2. Ayrilana artik gorunum GITMIYOR. Botlar ~1.4 sn'de bir oynuyor,
+      //    dolayisiyla bu pencerede eskiden birkac paket gelirdi.
+      let gorunumGeldi = false;
+      arkadas!.on('oyun:gorunum', () => {
+        gorunumGeldi = true;
+      });
+      await new Promise((coz) => setTimeout(coz, 4_000));
+      expect(gorunumGeldi).toBe(false);
+
+      // 3. Gercekten serbest: yeni masa acabiliyor.
+      const yeni = await sor(arkadas!, 'masa:kur');
+      expect(yeni.ok).toBe(true);
+    } finally {
+      kapat([sahip!, arkadas!]);
+    }
+  }, 40_000);
 });

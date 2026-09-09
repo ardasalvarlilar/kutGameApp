@@ -318,11 +318,26 @@ if (kazanan okeyle bittiyse)  ceza *= 2   // ikisi birden → *4
 ceza += 5 * (çalınan taş sayısı)        // çarpana GİRMEZ, en sonda eklenir
 ceza += 50 * (atılan işler taş sayısı) // bu da çarpana GİRMEZ
 
-kazanan.puan = -100 + 5 * (çalınan taş sayısı)   // kazanan da çalma bedelini öder
+kazanan.puan = (okeyle bittiyse -200, değilse -100)
+             + 5 * (çalınan taş sayısı)          // kazanan da çalma bedelini öder
 ```
 
 **"Okeyle bitti"** = bitiren oyuncunun **ortaya attığı son taşın okey olması**.
 Perlerinde okey kullanmış olması bir şey ifade etmez.
+
+### Okeyle bitirenin ödülü — -200 (0.11)
+
+Okeyle bitmek rakiplere ×2 (açamayanlara ×4) yazdırır; bitirenin kendisi de
+**-100 yerine -200** alır.
+
+Ödül olmadan kural bitiren için nötrdü: elinde 25 puanlık okeyi tutup normal
+bitmekle okeyi atıp bitmek arasında kazanan açısından hiçbir fark yoktu — tek
+etkisi rakiplerin daha çok yazmasıydı. Okeyi son taş olarak saklamak
+oynanabilir bir risk; karşılığı bitirenin kendi puanında görünmeli.
+
+Tur 16'da bu ödül, ×2 çarpanıyla **aynı şarta** bağlıdır
+(`tur16OkeyleBitmeCarpani`): çarpanın işlemediği bir turda kazanan da ödül
+almaz. Çalma ve işler taş bedelleri -200'ün üstüne aynen eklenir.
 
 ### İşler taş atma — 50 puan
 
@@ -577,6 +592,26 @@ Ekran için `OyunDurumu.sonCalan` eklendi: atık öbeğinden eksilen taşın kim
 gittiğini göstermek gerekiyor.
 
 Motor bu kararlara göre yazıldı; her biri için en az bir test var.
+
+### 0.11 ile eklenenler (8 Eylül 2026)
+
+| Konu | Karar | Nerede |
+|---|---|---|
+| Okeyle bitirenin puanı | **-100 değil -200** | §8 |
+
+Oyunda fark edildi: okeyle bitmek yalnızca **rakiplerin** yazdığını artırıyor
+(×2, açamayanlarda ×4), bitirenin kendi puanında hiçbir karşılığı yok. Elindeki
+25 puanlık okeyi son taş olarak saklamak gerçek bir risk — deste tükenirse ya da
+biri önce bitirirse 25 puan cebinde kalır — ama kazandığında getirisi normal
+bitişle aynı -100'dü. Kural fiilen "rakiplerini cezalandır" idi, "iyi oyna" değil.
+
+Ödül kazananın kendi satırına yazılıyor: **-200**. Çarpanlarla oynanmadı;
+rakiplerin ×2/×4'ü aynen duruyor. Tur 16'da ödül `tur16OkeyleBitmeCarpani`
+ayarına bağlı — çarpanın kapalı olduğu bir turda kazanan da ödül almasın diye
+ikisi tek şarta bağlandı.
+
+Motorda karşılığı: `KAZANAN_OKEYLE_PUANI` sabiti ve `PuanDetayi`de kazanan için
+`okeyleBitmeCarpani` bayrağının anlamı ("çarpan yedi" değil, "-200 aldı").
 
 ---
 

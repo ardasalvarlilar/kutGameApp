@@ -52,6 +52,7 @@ import {
 } from 'react-native';
 import { Alan, AnaDugme, Hata } from './Alan';
 import { Avatar } from './Avatar';
+import { useCeviri } from '../dil';
 import type { ArkadasDurumu } from '../ag/api';
 import type { OyuncuOzeti } from '../ag/protokol';
 import { renkler } from '../tema';
@@ -124,6 +125,7 @@ function ArkadasSeridi({
   readonly onKatil: (kod: string) => void;
   readonly onProfil: () => void;
 }) {
+  const t = useCeviri();
   if (arkadaslar === null) return null;
 
   const masadakiler = arkadaslar.arkadaslar.filter((kisi) => kisi.masaKodu !== null);
@@ -132,21 +134,21 @@ function ArkadasSeridi({
   return (
     <View style={stil.arkadasKutu}>
       <Pressable onPress={onProfil} style={stil.arkadasBaslikSatiri} hitSlop={6}>
-        <Text style={stil.bolumBaslik}>ARKADAŞLAR</Text>
+        <Text style={stil.bolumBaslik}>{t('lobi.arkadaslar')}</Text>
         {gelenSayisi > 0 ? (
           // Bekleyen istek gorunur olmali, yoksa profil ekranina girmeyen
           // oyuncu istegin geldigini hic ogrenmiyor.
           <View style={stil.rozet}>
-            <Text style={stil.rozetYazi}>{gelenSayisi} istek</Text>
+            <Text style={stil.rozetYazi}>{t('lobi.istekRozeti', { sayi: gelenSayisi })}</Text>
           </View>
         ) : null}
       </Pressable>
 
       {masadakiler.length === 0 ? (
         <Text style={stil.arkadasBos}>
-          {arkadaslar.arkadaslar.length === 0
-            ? 'Henüz arkadaşın yok — profilinden kodla ekleyebilirsin.'
-            : 'Şu an açık masası olan arkadaşın yok.'}
+          {t(
+            arkadaslar.arkadaslar.length === 0 ? 'lobi.arkadasYok' : 'lobi.acikMasaYok',
+          )}
         </Text>
       ) : (
         masadakiler.slice(0, 3).map((kisi) => (
@@ -156,7 +158,7 @@ function ArkadasSeridi({
               <Text style={stil.arkadasAd} numberOfLines={1}>
                 {kisi.ad}
               </Text>
-              <Text style={stil.arkadasMasa}>masa {kisi.masaKodu}</Text>
+              <Text style={stil.arkadasMasa}>{t('lobi.masaKodu', { kod: kisi.masaKodu ?? '' })}</Text>
             </View>
             <Pressable
               onPress={aktif ? () => onKatil(kisi.masaKodu as string) : undefined}
@@ -166,7 +168,7 @@ function ArkadasSeridi({
                 !aktif && stil.pasif,
               ]}
             >
-              <Text style={stil.katilYazi}>KATIL</Text>
+              <Text style={stil.katilYazi}>{t('lobi.katil')}</Text>
             </Pressable>
           </View>
         ))
@@ -189,6 +191,7 @@ export function Lobi({
   onProfil,
 }: LobiOzellikleri) {
   const [kod, setKod] = useState('');
+  const t = useCeviri();
   const kodTamam = kod.trim().length >= 3;
   const hazir = bagli && !mesgul;
 
@@ -200,7 +203,7 @@ export function Lobi({
       <View style={stil.sol}>
         <View style={stil.marka}>
           <Text style={stil.oyunAdi}>KÜT</Text>
-          <Text style={stil.altBaslik}>okey taşlarıyla · 4 oyuncu · 16 tur</Text>
+          <Text style={stil.altBaslik}>{t('lobi.altBaslik')}</Text>
         </View>
 
         {/* Profil karti bir DUGME: hesap, arkadaslar ve ayarlar oraya
@@ -218,7 +221,10 @@ export function Lobi({
             <Text style={stil.istatistik}>
               {oyuncu === null
                 ? ''
-                : `${oyuncu.oynananEl} el · ${oyuncu.kazanilanEl} galibiyet`}
+                : t('lobi.istatistik', {
+                    el: oyuncu.oynananEl,
+                    galibiyet: oyuncu.kazanilanEl,
+                  })}
             </Text>
           </View>
           <Text style={stil.profilOk}>›</Text>
@@ -227,9 +233,7 @@ export function Lobi({
         {oyuncu?.misafirMi === true ? (
           // Misafir hesabi cihaza bagli: uygulama silinirse ilerleme gider.
           // Bunu oyuncuya SOYLEMEK, sonradan sikayet almaktan iyi.
-          <Text style={stil.uyari}>
-            Misafir oynuyorsun — hesap açmazsan ilerlemen bu telefonda kalır.
-          </Text>
+          <Text style={stil.uyari}>{t('lobi.misafirUyari')}</Text>
         ) : null}
 
         <ArkadasSeridi
@@ -241,14 +245,14 @@ export function Lobi({
 
         <View style={stil.durumSatiri}>
           <View style={[stil.nokta, bagli ? stil.noktaAcik : stil.noktaKapali]} />
-          <Text style={stil.durumYazi}>{bagli ? 'sunucuya bağlı' : 'bağlanılıyor…'}</Text>
+          <Text style={stil.durumYazi}>{t(bagli ? 'lobi.bagli' : 'lobi.baglaniyor')}</Text>
         </View>
       </View>
 
       <ScrollView contentContainerStyle={stil.sag} keyboardShouldPersistTaps="handled">
         <MasaDugmesi
-          etiket="HIZLI OYNA"
-          aciklama="Uygun bir masaya otur, dört kişi olunca başla"
+          etiket={t('lobi.hizliOyna')}
+          aciklama={t('lobi.hizliOynaAciklama')}
           onBas={onHizli}
           aktif={hazir}
           buyuk
@@ -257,16 +261,16 @@ export function Lobi({
         <View style={stil.ikili}>
           <View style={stil.esit}>
             <MasaDugmesi
-              etiket="MASA BUL"
-              aciklama="Açık masaları gör"
+              etiket={t('lobi.masaBul')}
+              aciklama={t('lobi.masaBulAciklama')}
               onBas={onMasaBul}
               aktif={hazir}
             />
           </View>
           <View style={stil.esit}>
             <MasaDugmesi
-              etiket="ÖZEL MASA"
-              aciklama="Kod üret, paylaş"
+              etiket={t('lobi.ozelMasa')}
+              aciklama={t('lobi.ozelMasaAciklama')}
               onBas={onMasaAc}
               aktif={hazir}
             />
@@ -275,7 +279,7 @@ export function Lobi({
 
         <View style={stil.katilKutu}>
           <Alan
-            etiket="Arkadaşının masa kodu"
+            etiket={t('lobi.masaKoduAlani')}
             value={kod}
             onChangeText={(yazi) => setKod(yazi.toLocaleUpperCase('tr-TR'))}
             placeholder="4F7A"
@@ -285,7 +289,7 @@ export function Lobi({
             returnKeyType="go"
           />
           <AnaDugme
-            etiket="KODLA KATIL"
+            etiket={t('lobi.kodlaKatil')}
             onBas={() => onKatil(kod)}
             aktif={hazir && kodTamam}
             tur="sade"
@@ -298,7 +302,7 @@ export function Lobi({
 
         {/* Cevrimdisi: sunucu gerekmiyor, bu yuzden `bagli` sartina bakmiyor.
             Baglanti yokken calisan tek giris bu. */}
-        <AnaDugme etiket="ALIŞTIRMA · ÇEVRİMDIŞI" onBas={onAlistirma} tur="cizgi" />
+        <AnaDugme etiket={t('lobi.alistirma')} onBas={onAlistirma} tur="cizgi" />
       </ScrollView>
     </KeyboardAvoidingView>
   );

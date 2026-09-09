@@ -18,7 +18,14 @@ import {
   type YerPeri,
 } from '@kut/engine';
 import { reduce } from '@kut/engine';
-import { acilisBul, atilacakTas, botAksiyonu, islenebilir } from '../src/bot';
+import {
+  acilisBul,
+  atilacakTas,
+  botAksiyonu,
+  botTalebi,
+  indirilecekPerler,
+  islenebilir,
+} from '../src/bot';
 import { sureDolduAksiyonu } from '../src/sure';
 
 const t = (renk: Renk, sayi: Sayi, kopya: 'a' | 'b' = 'a'): Tas => normalTas(renk, sayi, kopya);
@@ -46,6 +53,7 @@ function gorunumKur(p: {
   readonly siradaki?: OyuncuId;
   readonly pencere?: OyuncuGorunumu['pencere'];
   readonly atikYiginlari?: OyuncuGorunumu['atikYiginlari'];
+  readonly desteSayisi?: number;
 }): OyuncuGorunumu {
   return {
     ben: 0,
@@ -56,7 +64,7 @@ function gorunumKur(p: {
     faz: p.faz ?? 'atma',
     istakam: p.istakam,
     tasSayilari: oyuncuKaydiOlustur(() => 14),
-    desteSayisi: 40,
+    desteSayisi: p.desteSayisi ?? 40,
     atikYiginlari:
       p.atikYiginlari ?? oyuncuKaydiOlustur(() => ({ ustTas: null, adet: 0 })),
     atikUstu: null,
@@ -70,6 +78,8 @@ function gorunumKur(p: {
     okeyFirsatlarim: [],
     pencere: p.pencere ?? null,
     sonCalan: null,
+    sonHareketler: [],
+    sonHareketNo: 0,
     sonuc: null,
   };
 }
@@ -396,6 +406,8 @@ describe('tur 15 kilitlenmesi — uctan uca', () => {
       talepler: [] as readonly OyuncuId[],
     },
     sonCalan: null,
+    sonHareketler: [],
+    sonHareketNo: 0,
     sonuc: null,
   };
 
@@ -425,5 +437,204 @@ describe('tur 15 kilitlenmesi — uctan uca', () => {
     expect(kurtarma).toMatchObject({ tip: 'CEK_DESTEDEN' });
     const sonuc = reduce(durum, kurtarma as NonNullable<typeof kurtarma>);
     expect(sonuc.ok).toBe(true);
+  });
+});
+
+// --- Fazladan per indirme (KURALLAR.md §6) -----------------------------------
+
+describe('indirilecekPerler — "fazladan kut ve seri indirebilirsin"', () => {
+  it('cakismayan perleri secer', () => {
+    const el = [
+      t('kirmizi', 4), t('kirmizi', 5), t('kirmizi', 6),
+      t('mavi', 9), t('siyah', 9), t('sari', 9),
+      t('sari', 2),
+    ];
+    const perler = indirilecekPerler(el);
+    expect(perler).toHaveLength(2);
+
+    const inen = perler.flat();
+    expect(inen).toHaveLength(6);
+    // Ayni tas iki perde birden olamaz.
+    expect(new Set(inen.map((tas) => tas.id)).size).toBe(6);
+  });
+
+  it('eli BOSALTMAZ — bitis son tasi atarak olur (§7)', () => {
+    const el = [
+      t('kirmizi', 4), t('kirmizi', 5), t('kirmizi', 6),
+      t('mavi', 9), t('siyah', 9), t('sari', 9),
+    ];
+    // Iki per de inseydi el bosalirdi; motor `son-tas-atilmali` derdi.
+    expect(indirilecekPerler(el).flat().length).toBeLessThan(el.length);
+  });
+
+  it('per yoksa bos doner', () => {
+    const el = [t('kirmizi', 1), t('siyah', 4), t('mavi', 7), t('sari', 10)];
+    expect(indirilecekPerler(el)).toHaveLength(0);
+  });
+});
+
+describe('botAksiyonu — actiktan sonra oynamaya devam eder', () => {
+  it('elde tam per varsa PER_INDIR gonderir (eskiden yalnizca atardi)', () => {
+    const gorunum = gorunumKur({
+      istakam: [
+        t('kirmizi', 4), t('kirmizi', 5), t('kirmizi', 6),
+        t('sari', 2), t('sari', 11),
+      ],
+      acmisMi: true,
+      islemeYapabilirim: true,
+    });
+    expect(botAksiyonu(gorunum, 0, 0)?.tip).toBe('PER_INDIR');
+  });
+
+  it('indirilecek per yoksa yine atar', () => {
+    const gorunum = gorunumKur({
+      istakam: [t('sari', 2), t('sari', 11), t('mavi', 4)],
+      acmisMi: true,
+      islemeYapabilirim: true,
+    });
+    expect(botAksiyonu(gorunum, 0, 0)?.tip).toBe('AT');
+  });
+
+  it('acmamis oyuncu once acilisi arar; PER_INDIR gondermez', () => {
+    const gorunum = gorunumKur({
+      istakam: [
+        t('kirmizi', 7), t('siyah', 7), t('mavi', 7),
+        t('kirmizi', 9), t('siyah', 9), t('mavi', 9),
+        t('sari', 2), t('sari', 5),
+      ],
+      acmisMi: false,
+    });
+    expect(botAksiyonu(gorunum, 0, 0)?.tip).toBe('AC');
+  });
+});
+
+// --- Talep penceresi: calma ve "cifti bende" (KURALLAR.md §5) ----------------
+
+/** Bir talep penceresi ve ona ait atik yigini. */
+function pencereKur(p: {
+  readonly atan: OyuncuId;
+  readonly tas: Tas;
+  readonly talepler?: readonly OyuncuId[];
+  readonly ciftHakkim?: boolean;
+}): Pick<OyuncuGorunumu, 'pencere' | 'atikYiginlari'> {
+  return {
+    pencere: {
+      atan: p.atan,
+      tasId: p.tas.id,
+      talepler: p.talepler ?? [],
+      ciftHakkim: p.ciftHakkim ?? false,
+    },
+    atikYiginlari: oyuncuKaydiOlustur((o: OyuncuId) =>
+      o === p.atan ? { ustTas: p.tas, adet: 1 } : { ustTas: null, adet: 0 },
+    ),
+  };
+}
+
+describe('botTalebi — botlar da calar', () => {
+  it('tas YENI BIR PER kuruyorsa calar', () => {
+    const gorunum = gorunumKur({
+      istakam: [t('kirmizi', 4), t('kirmizi', 5), t('sari', 2), t('mavi', 11)],
+      siradaki: 2,
+      ...pencereKur({ atan: 1, tas: t('kirmizi', 6) }),
+    });
+    expect(botTalebi(gorunum, 0, 0)?.tip).toBe('CALMA_TALEBI');
+  });
+
+  it('yalnizca mevcut peri uzatiyorsa calmaz — 5 puana degmez', () => {
+    const gorunum = gorunumKur({
+      istakam: [t('kirmizi', 4), t('kirmizi', 5), t('kirmizi', 6), t('sari', 2)],
+      siradaki: 2,
+      ...pencereKur({ atan: 1, tas: t('kirmizi', 7) }),
+    });
+    expect(botTalebi(gorunum, 0, 0)).toBeNull();
+  });
+
+  it('turun acilisini actiriyorsa calar', () => {
+    // Tur 1: iki uclu kut. `mavi 9` gelmeden sart karsilanmiyor.
+    const gorunum = gorunumKur({
+      istakam: [
+        t('kirmizi', 7), t('siyah', 7), t('mavi', 7),
+        t('kirmizi', 9), t('siyah', 9),
+        t('sari', 2), t('sari', 5),
+      ],
+      tur: 1,
+      siradaki: 2,
+      ...pencereKur({ atan: 1, tas: t('mavi', 9) }),
+    });
+    expect(botTalebi(gorunum, 0, 0)?.tip).toBe('CALMA_TALEBI');
+  });
+
+  it('tur 15te cift hakki varsa CIFT_TALEBI gonderir', () => {
+    const gorunum = gorunumKur({
+      istakam: [t('kirmizi', 7, 'b'), t('sari', 2)],
+      tur: 15,
+      siradaki: 2,
+      ...pencereKur({ atan: 1, tas: t('kirmizi', 7), ciftHakkim: true }),
+    });
+    expect(botTalebi(gorunum, 0, 0)?.tip).toBe('CIFT_TALEBI');
+  });
+
+  it('deste bossa calamaz — ceza tasi cekilemez (§5)', () => {
+    const gorunum = gorunumKur({
+      istakam: [t('kirmizi', 4), t('kirmizi', 5), t('sari', 2)],
+      siradaki: 2,
+      desteSayisi: 0,
+      ...pencereKur({ atan: 1, tas: t('kirmizi', 6) }),
+    });
+    expect(botTalebi(gorunum, 0, 0)).toBeNull();
+  });
+
+  it('motorun reddedecegi talepleri hic gondermez', () => {
+    const el = [t('kirmizi', 4), t('kirmizi', 5), t('sari', 2)];
+    const tas = t('kirmizi', 6);
+
+    // Atan kendisi.
+    expect(
+      botTalebi(gorunumKur({ istakam: el, siradaki: 2, ...pencereKur({ atan: 0, tas }) }), 0, 0),
+    ).toBeNull();
+
+    // Sirasi gelen zaten bedelsiz alabilir.
+    expect(
+      botTalebi(gorunumKur({ istakam: el, siradaki: 0, ...pencereKur({ atan: 1, tas }) }), 0, 0),
+    ).toBeNull();
+
+    // Zaten talep etmis.
+    expect(
+      botTalebi(
+        gorunumKur({
+          istakam: el,
+          siradaki: 2,
+          ...pencereKur({ atan: 1, tas, talepler: [0] }),
+        }),
+        0,
+        0,
+      ),
+    ).toBeNull();
+
+    // Pencere yok.
+    expect(botTalebi(gorunumKur({ istakam: el, siradaki: 2 }), 0, 0)).toBeNull();
+  });
+});
+
+describe('yerden alma esigi — actiktan sonra da alir', () => {
+  it('tas mevcut peri uzatiyorsa bile yerden alir (bedelsiz)', () => {
+    const gorunum = gorunumKur({
+      istakam: [t('kirmizi', 4), t('kirmizi', 5), t('kirmizi', 6), t('sari', 2)],
+      faz: 'cekme',
+      acmisMi: true,
+      ...pencereKur({ atan: 3, tas: t('kirmizi', 7) }),
+    });
+    // Eski esik "yeni per kurmali" idi; bot bu tasi birakip desteden cekiyordu.
+    expect(botAksiyonu(gorunum, 0, 0)?.tip).toBe('CEK_ATIKTAN');
+  });
+
+  it('tas hicbir ise yaramiyorsa desteden ceker', () => {
+    const gorunum = gorunumKur({
+      istakam: [t('kirmizi', 4), t('kirmizi', 5), t('kirmizi', 6), t('sari', 2)],
+      faz: 'cekme',
+      acmisMi: true,
+      ...pencereKur({ atan: 3, tas: t('mavi', 12) }),
+    });
+    expect(botAksiyonu(gorunum, 0, 0)?.tip).toBe('CEK_DESTEDEN');
   });
 });

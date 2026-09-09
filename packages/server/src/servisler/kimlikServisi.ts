@@ -184,7 +184,7 @@ export async function misafirGirisi(girdi: MisafirGirisi): Promise<GirisSonucu> 
  */
 export async function kayitOl(girdi: Kayit): Promise<GirisSonucu> {
   const varOlan = await Oyuncu.findOne({ eposta: girdi.eposta }).lean();
-  if (varOlan !== null) throw new KimlikHatasi('Bu e-posta zaten kayıtlı');
+  if (varOlan !== null) throw new KimlikHatasi('eposta-zaten-kayitli');
 
   const ozet = await bcrypt.hash(girdi.parola, BCRYPT_TURU);
 
@@ -225,12 +225,12 @@ export async function girisYap(girdi: Giris): Promise<GirisSonucu> {
     // Kayitli olmayan adreste de bcrypt calistir: yanit suresinden hesabin
     // var olup olmadigi anlasilmasin.
     await bcrypt.compare(girdi.parola, '$2a$10$aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
-    throw new KimlikHatasi('E-posta ya da parola hatalı');
+    throw new KimlikHatasi('eposta-parola-hatali');
   }
 
   const uyuyor = await bcrypt.compare(girdi.parola, oyuncu.parolaOzeti);
-  if (!uyuyor) throw new KimlikHatasi('E-posta ya da parola hatalı');
-  if (oyuncu.engelli) throw new KimlikHatasi('Hesabın askıya alınmış');
+  if (!uyuyor) throw new KimlikHatasi('eposta-parola-hatali');
+  if (oyuncu.engelli) throw new KimlikHatasi('hesap-askida');
 
   oyuncu.sonGorulme = new Date();
   await oyuncu.save();
@@ -243,11 +243,11 @@ export async function misafirYukselt(
   girdi: Omit<Kayit, 'cihazKimligi'>,
 ): Promise<GirisSonucu> {
   const oyuncu = await Oyuncu.findById(oyuncuId);
-  if (oyuncu === null) throw new KimlikHatasi('Oyuncu bulunamadı');
-  if (!oyuncu.misafirMi) throw new KimlikHatasi('Bu hesabın zaten e-postası var');
+  if (oyuncu === null) throw new KimlikHatasi('oyuncu-bulunamadi');
+  if (!oyuncu.misafirMi) throw new KimlikHatasi('hesabin-epostasi-var');
 
   const varOlan = await Oyuncu.findOne({ eposta: girdi.eposta }).lean();
-  if (varOlan !== null) throw new KimlikHatasi('Bu e-posta zaten kayıtlı');
+  if (varOlan !== null) throw new KimlikHatasi('eposta-zaten-kayitli');
 
   oyuncu.ad = girdi.ad;
   oyuncu.eposta = girdi.eposta;
@@ -261,7 +261,7 @@ export async function misafirYukselt(
 /** Oyuncunun gorunen adini degistirir. */
 export async function adiDegistir(oyuncuId: string, ad: string): Promise<GirisSonucu> {
   const oyuncu = await Oyuncu.findById(oyuncuId);
-  if (oyuncu === null) throw new KimlikHatasi('Oyuncu bulunamadı');
+  if (oyuncu === null) throw new KimlikHatasi('oyuncu-bulunamadi');
   oyuncu.ad = ad;
   await oyuncu.save();
   return { jeton: jetonUret(String(oyuncu._id)), oyuncu };
@@ -307,7 +307,7 @@ function kodUret(): string {
  */
 export async function parolaKoduIste(girdi: ParolaUnuttum): Promise<{ postaGitti: boolean }> {
   if (!config.posta.acikMi) {
-    throw new KimlikHatasi('Parola sıfırlama şu an kullanılamıyor, destekle iletişime geç');
+    throw new KimlikHatasi('sifirlama-kullanilamiyor');
   }
 
   const oyuncu = await Oyuncu.findOne({ eposta: girdi.eposta });
@@ -332,7 +332,7 @@ export async function parolayiSifirla(girdi: ParolaSifirla): Promise<GirisSonucu
 
   // Tek ve ayni mesaj: hangi adimda takildigini soylemek, kayitli adresleri
   // ve gecerli kodlari deneme yanilmayla bulmayi kolaylastirirdi.
-  const gecersiz = new KimlikHatasi('Kod geçersiz ya da süresi dolmuş');
+  const gecersiz = new KimlikHatasi('kod-gecersiz');
 
   if (oyuncu === null || istek === undefined || istek === null) throw gecersiz;
   if (istek.sonKullanma.getTime() < Date.now()) {
@@ -343,7 +343,7 @@ export async function parolayiSifirla(girdi: ParolaSifirla): Promise<GirisSonucu
   if (istek.deneme >= config.parolaSifirlama.enFazlaDeneme) {
     oyuncu.set('parolaSifirlama', undefined);
     await oyuncu.save();
-    throw new KimlikHatasi('Çok fazla yanlış deneme — yeni bir kod iste');
+    throw new KimlikHatasi('cok-yanlis-deneme');
   }
 
   const uyuyor = await bcrypt.compare(girdi.kod, istek.ozet);
@@ -385,15 +385,15 @@ export async function parolayiDegistir(
   girdi: ParolaDegistir,
 ): Promise<GirisSonucu> {
   const oyuncu = await Oyuncu.findById(oyuncuId).select('+parolaOzeti');
-  if (oyuncu === null) throw new KimlikHatasi('Oyuncu bulunamadı');
+  if (oyuncu === null) throw new KimlikHatasi('oyuncu-bulunamadi');
   if (typeof oyuncu.parolaOzeti !== 'string') {
-    throw new KimlikHatasi('Bu hesabın parolası yok — önce e-postayla hesap aç');
+    throw new KimlikHatasi('hesabin-parolasi-yok');
   }
 
   const uyuyor = await bcrypt.compare(girdi.mevcutParola, oyuncu.parolaOzeti);
-  if (!uyuyor) throw new KimlikHatasi('Mevcut parolan hatalı');
+  if (!uyuyor) throw new KimlikHatasi('mevcut-parola-hatali');
   if (girdi.mevcutParola === girdi.yeniParola) {
-    throw new KimlikHatasi('Yeni parola eskisiyle aynı olamaz');
+    throw new KimlikHatasi('parola-ayni');
   }
 
   oyuncu.parolaOzeti = await bcrypt.hash(girdi.yeniParola, BCRYPT_TURU);
@@ -425,7 +425,7 @@ export async function parolayiDegistir(
  */
 export async function hesabiSil(oyuncuId: string): Promise<void> {
   const oyuncu = await Oyuncu.findById(oyuncuId);
-  if (oyuncu === null) throw new KimlikHatasi('Oyuncu bulunamadı');
+  if (oyuncu === null) throw new KimlikHatasi('oyuncu-bulunamadi');
 
   const eposta = oyuncu.eposta ?? null;
   const ad = oyuncu.ad;

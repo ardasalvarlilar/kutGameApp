@@ -88,6 +88,8 @@ export function durumKur(parametreler: KurulumParametreleri = {}): OyunDurumu {
     islerTasSayisi: oyuncuKaydiOlustur((o) => p.islerTasSayisi?.[o] ?? 0),
     pencere: p.pencere ?? null,
     sonCalan: null,
+    sonHareketler: [],
+    sonHareketNo: 0,
     sonuc: null,
   };
 }

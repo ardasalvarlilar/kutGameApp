@@ -31,6 +31,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { OyuncuId } from '@kut/engine';
 import { AnaDugme, Hata } from './Alan';
 import { Avatar } from './Avatar';
+import { useCeviri } from '../dil';
 import type { KoltukGorunumu, MasaGorunumu } from '../ag/protokol';
 import { renkler } from '../tema';
 
@@ -76,6 +77,7 @@ function KoltukKarti({
   readonly onBas: () => void;
   readonly onBotuCikar: () => void;
 }) {
+  const t = useCeviri();
   const dokunulabilir = !mesgul && (hal === 'bos' || hal === 'baskasi');
 
   return (
@@ -92,8 +94,8 @@ function KoltukKarti({
 
       {koltuk === undefined ? (
         <View style={stil.koltukBilgi}>
-          <Text style={stil.bosYazi}>boş koltuk</Text>
-          <Text style={stil.ipucu}>{mesgul ? '…' : 'dokun, buraya otur'}</Text>
+          <Text style={stil.bosYazi}>{t('bekleme.bosKoltuk')}</Text>
+          <Text style={stil.ipucu}>{mesgul ? '…' : t('bekleme.dokunOtur')}</Text>
         </View>
       ) : (
         <>
@@ -104,16 +106,14 @@ function KoltukKarti({
             </Text>
             <Text style={stil.ipucu}>
               {hal === 'bot'
-                ? 'sunucu oynuyor'
+                ? t('bekleme.sunucuOynuyor')
                 : bekleyenTalep
-                  ? 'yer değiştirme isteğin bekliyor'
+                  ? t('bekleme.talebinBekliyor')
                   : hal === 'baskasi'
-                    ? 'dokun, yerini iste'
+                    ? t('bekleme.dokunYeriniIste')
                     : koltuk.bagli
-                      ? koltuk.hazir
-                        ? 'hazır'
-                        : 'hazır değil'
-                      : 'bağlantısı koptu'}
+                      ? t(koltuk.hazir ? 'bekleme.hazir' : 'bekleme.hazirDegil')
+                      : t('bekleme.baglantiKoptu')}
             </Text>
           </View>
         </>
@@ -121,12 +121,12 @@ function KoltukKarti({
 
       {hal === 'bot' && sahipMiyim ? (
         <Pressable onPress={mesgul ? undefined : onBotuCikar} style={stil.kucukDugme} hitSlop={6}>
-          <Text style={stil.kucukYazi}>ÇIKAR</Text>
+          <Text style={stil.kucukYazi}>{t('bekleme.cikar')}</Text>
         </Pressable>
       ) : koltuk !== undefined && hal !== 'bot' ? (
         <View style={[stil.rozet, koltuk.hazir ? stil.rozetHazir : stil.rozetBekler]}>
           <Text style={[stil.rozetYazi, koltuk.hazir && stil.rozetYaziHazir]}>
-            {koltuk.hazir ? 'HAZIR' : 'BEKLİYOR'}
+            {t(koltuk.hazir ? 'bekleme.rozetHazir' : 'bekleme.rozetBekliyor')}
           </Text>
         </View>
       ) : null}
@@ -147,6 +147,7 @@ export function Bekleme({
   onBotlariDoldur,
   onBotuCikar,
 }: BeklemeOzellikleri) {
+  const t = useCeviri();
   const benimKoltuk = masa.koltuklar.find((koltuk) => koltuk.oyuncuId === benimId);
   const hazirim = benimKoltuk?.hazir ?? false;
   const sahipMiyim = masa.sahipId === benimId;
@@ -166,7 +167,8 @@ export function Bekleme({
   const benimTalebim = masa.koltukTalepleri.find((talep) => talep.isteyenId === benimId);
 
   const adiBul = (oyuncuId: string): string =>
-    masa.koltuklar.find((koltuk) => koltuk.oyuncuId === oyuncuId)?.ad ?? 'Oyuncu';
+    masa.koltuklar.find((koltuk) => koltuk.oyuncuId === oyuncuId)?.ad ??
+    t('bekleme.bilinmeyenOyuncu');
 
   const koltugaBas = (no: OyuncuId, koltuk: KoltukGorunumu | undefined): void => {
     if (koltuk === undefined) onKoltugaGec(no);
@@ -176,19 +178,17 @@ export function Bekleme({
   return (
     <View style={stil.govde}>
       <View style={stil.sol}>
-        <Text style={stil.etiket}>MASA KODU</Text>
+        <Text style={stil.etiket}>{t('bekleme.masaKodu')}</Text>
         <Text style={stil.kod}>{masa.kod}</Text>
         <Text style={stil.aciklama}>
-          {masa.ozel
-            ? 'Arkadaşlarına bu kodu söyle — “KODLA KATIL” ile otursunlar'
-            : 'Açık masa — kod bilmeyenler de oturabilir'}
+          {t(masa.ozel ? 'bekleme.ozelAciklama' : 'bekleme.acikAciklama')}
         </Text>
         <Text style={stil.sayac}>
           {bosSayisi > 0
-            ? `${bosSayisi} koltuk boş`
+            ? t('bekleme.bosKoltukSayisi', { sayi: bosSayisi })
             : bekleyenSayisi > 0
-              ? `${bekleyenSayisi} kişi henüz hazır değil`
-              : 'Masa doldu — el birazdan dağıtılıyor'}
+              ? t('bekleme.hazirOlmayan', { sayi: bekleyenSayisi })
+              : t('bekleme.masaDoldu')}
         </Text>
 
         {/* Botlarla oynama: dort kisi toplanmadan da masa kurulabilsin.
@@ -196,13 +196,10 @@ export function Bekleme({
             biri gelmek uzereyken masanin kapanmasi demek olurdu. */}
         {bosSayisi > 0 && sahipMiyim ? (
           <View style={stil.botKutusu}>
-            <Text style={stil.botBaslik}>DÖRT KİŞİ TOPLANMADI MI?</Text>
-            <Text style={stil.botMetin}>
-              Boş koltukları bot oynasın; oyun hemen başlar. Botlar arkadaşın
-              gelince çıkarılabilir.
-            </Text>
+            <Text style={stil.botBaslik}>{t('bekleme.botBaslik')}</Text>
+            <Text style={stil.botMetin}>{t('bekleme.botMetin')}</Text>
             <AnaDugme
-              etiket={`${bosSayisi} KOLTUĞU BOT OYNASIN`}
+              etiket={t('bekleme.botDoldur', { sayi: bosSayisi })}
               onBas={onBotlariDoldur}
               aktif={!mesgul}
               tur="sade"
@@ -212,10 +209,8 @@ export function Bekleme({
       </View>
 
       <ScrollView contentContainerStyle={stil.sag}>
-        <Text style={stil.etiket}>KOLTUKLAR</Text>
-        <Text style={stil.koltukIpucu}>
-          Attığın taşı sağındaki alır — kimin nerede oturduğu oyunu değiştirir.
-        </Text>
+        <Text style={stil.etiket}>{t('bekleme.koltuklar')}</Text>
+        <Text style={stil.koltukIpucu}>{t('bekleme.koltukIpucu')}</Text>
 
         <View style={stil.koltuklar}>
           {KOLTUKLAR.map((no) => {
@@ -249,21 +244,20 @@ export function Bekleme({
         {banaGelenler.map((talep) => (
           <View key={talep.isteyenId} style={stil.talep}>
             <Text style={stil.talepMetin} numberOfLines={2}>
-              {adiBul(talep.isteyenId)} senin koltuğuna geçmek istiyor. Kabul
-              edersen yer değiştirirsiniz.
+              {t('bekleme.talepMetni', { ad: adiBul(talep.isteyenId) })}
             </Text>
             <View style={stil.talepDugmeler}>
               <Pressable
                 onPress={mesgul ? undefined : () => onKoltukCevap(talep.isteyenId, true)}
                 style={[stil.kucukDugme, stil.kucukVurgu]}
               >
-                <Text style={[stil.kucukYazi, stil.kucukYaziVurgu]}>KABUL</Text>
+                <Text style={[stil.kucukYazi, stil.kucukYaziVurgu]}>{t('bekleme.kabul')}</Text>
               </Pressable>
               <Pressable
                 onPress={mesgul ? undefined : () => onKoltukCevap(talep.isteyenId, false)}
                 style={stil.kucukDugme}
               >
-                <Text style={stil.kucukYazi}>RET</Text>
+                <Text style={stil.kucukYazi}>{t('bekleme.ret')}</Text>
               </Pressable>
             </View>
           </View>
@@ -274,14 +268,14 @@ export function Bekleme({
         <View style={stil.dugmeler}>
           <View style={stil.dugme}>
             <AnaDugme
-              etiket={hazirim ? 'HAZIR DEĞİLİM' : 'HAZIRIM'}
+              etiket={t(hazirim ? 'bekleme.hazirDegilim' : 'bekleme.hazirim')}
               onBas={() => onHazir(!hazirim)}
               aktif={!mesgul}
               tur={hazirim ? 'sade' : 'vurgu'}
             />
           </View>
           <View style={stil.dugme}>
-            <AnaDugme etiket="MASADAN ÇIK" onBas={onCik} aktif={!mesgul} tur="cizgi" />
+            <AnaDugme etiket={t('bekleme.masadanCik')} onBas={onCik} aktif={!mesgul} tur="cizgi" />
           </View>
         </View>
       </ScrollView>

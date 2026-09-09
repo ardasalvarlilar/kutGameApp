@@ -43,7 +43,7 @@ const KOD_UZUNLUGU = 5;
 const KOD_ONEKI = 'KUT-';
 
 function kimlik(deger: string): Types.ObjectId {
-  if (!Types.ObjectId.isValid(deger)) throw new ArkadasHatasi('Geçersiz oyuncu');
+  if (!Types.ObjectId.isValid(deger)) throw new ArkadasHatasi('gecersiz-oyuncu');
   return new Types.ObjectId(deger);
 }
 
@@ -76,7 +76,7 @@ export function koduNormalle(girdi: string): string {
  */
 export async function arkadasKodu(oyuncuId: string): Promise<string> {
   const oyuncu = await Oyuncu.findById(kimlik(oyuncuId)).select('arkadasKodu');
-  if (oyuncu === null) throw new ArkadasHatasi('Oyuncu bulunamadı');
+  if (oyuncu === null) throw new ArkadasHatasi('oyuncu-bulunamadi');
   if (typeof oyuncu.arkadasKodu === 'string' && oyuncu.arkadasKodu.length > 0) {
     return oyuncu.arkadasKodu;
   }
@@ -99,7 +99,7 @@ export async function arkadasKodu(oyuncuId: string): Promise<string> {
     const guncel = await Oyuncu.findById(oyuncu._id).select('arkadasKodu').lean();
     if (typeof guncel?.arkadasKodu === 'string') return guncel.arkadasKodu;
   }
-  throw new ArkadasHatasi('Arkadaş kodu üretilemedi, tekrar dene');
+  throw new ArkadasHatasi('arkadas-kodu-uretilemedi');
 }
 
 // --- Ozetler -----------------------------------------------------------------
@@ -291,12 +291,12 @@ async function sayimKontrol(ben: Types.ObjectId, hedef: Types.ObjectId): Promise
     }),
   ]);
 
-  if (benimArkadas >= EN_FAZLA_ARKADAS) throw new ArkadasHatasi('Arkadaş listen dolu');
+  if (benimArkadas >= EN_FAZLA_ARKADAS) throw new ArkadasHatasi('arkadas-listen-dolu');
   if (hedefArkadas >= EN_FAZLA_ARKADAS) {
-    throw new ArkadasHatasi('Bu oyuncunun arkadaş listesi dolu');
+    throw new ArkadasHatasi('karsi-arkadas-listesi-dolu');
   }
   if (benimGiden >= EN_FAZLA_GIDEN_ISTEK) {
-    throw new ArkadasHatasi('Çok fazla bekleyen isteğin var');
+    throw new ArkadasHatasi('cok-bekleyen-istek');
   }
 }
 
@@ -310,16 +310,16 @@ export type IstekSonucu = 'gonderildi' | 'arkadas-oldunuz' | 'zaten-arkadassiniz
  * gereksiz bir adima zorlamak olurdu.
  */
 export async function istekGonder(oyuncuId: string, hedefId: string): Promise<IstekSonucu> {
-  if (oyuncuId === hedefId) throw new ArkadasHatasi('Kendine istek gönderemezsin');
+  if (oyuncuId === hedefId) throw new ArkadasHatasi('kendine-istek');
   const ben = kimlik(oyuncuId);
   const hedef = kimlik(hedefId);
 
   if ((await Oyuncu.countDocuments({ _id: hedef })) === 0) {
-    throw new ArkadasHatasi('Oyuncu bulunamadı');
+    throw new ArkadasHatasi('oyuncu-bulunamadi');
   }
   // Engelliye istek atilamaz — iki yon de gecerli (App Store 1.2).
   if (await aralarindaEngelVarMi(oyuncuId, hedefId)) {
-    throw new ArkadasHatasi('Bu oyuncuya istek gönderemezsin');
+    throw new ArkadasHatasi('istek-gonderilemez');
   }
   await sayimKontrol(ben, hedef);
 
@@ -334,7 +334,7 @@ export async function istekGonder(oyuncuId: string, hedefId: string): Promise<Is
   }
 
   const mevcut = await Arkadaslik.findOne(cift);
-  if (mevcut === null) throw new ArkadasHatasi('İstek gönderilemedi, tekrar dene');
+  if (mevcut === null) throw new ArkadasHatasi('istek-gonderilemedi');
   if (mevcut.durum === 'arkadas') return 'zaten-arkadassiniz';
 
   // Bekleyen istek BENDEN geliyorsa yeniden gondermenin bir etkisi yok.
@@ -361,7 +361,7 @@ export async function istegiKabulEt(oyuncuId: string, hedefId: string): Promise<
     { ...cift, durum: 'bekliyor', isteyen: { $ne: ben } },
     { $set: { durum: 'arkadas' as ArkadaslikDurumu, kabulZamani: new Date() } },
   );
-  if (sonuc === null) throw new ArkadasHatasi('Bekleyen bir istek yok');
+  if (sonuc === null) throw new ArkadasHatasi('bekleyen-istek-yok');
 }
 
 /**

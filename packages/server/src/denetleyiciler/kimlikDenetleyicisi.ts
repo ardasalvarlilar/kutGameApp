@@ -71,7 +71,7 @@ async function calistir(yanit: Response, is: () => Promise<GirisSonucu>): Promis
 export async function misafir(istek: Request, yanit: Response): Promise<void> {
   const cozum = misafirGirisiSemasi.safeParse(istek.body);
   if (!cozum.success) {
-    yanit.status(400).json({ ok: false, hata: 'Cihaz kimliği geçersiz' });
+    yanit.status(400).json({ ok: false, hata: 'cihaz-kimligi-gecersiz' });
     return;
   }
   await calistir(yanit, () => misafirGirisi(cozum.data));
@@ -120,7 +120,7 @@ export async function adDegistir(istek: Request, yanit: Response): Promise<void>
 export async function ben(istek: Request, yanit: Response): Promise<void> {
   const oyuncu = await Oyuncu.findById(istek.oyuncuId);
   if (oyuncu === null) {
-    yanit.status(404).json({ ok: false, hata: 'Oyuncu bulunamadı' });
+    yanit.status(404).json({ ok: false, hata: 'oyuncu-bulunamadi' });
     return;
   }
   yanit.json({ ok: true, veri: { oyuncu: oyuncuOzeti(oyuncu) } });
@@ -154,7 +154,7 @@ export async function parolaUnuttum(istek: Request, yanit: Response): Promise<vo
     }
     // SMTP hatasi: oyuncuya ic ayrinti verme, gunluge tam halini yaz.
     gunluk.hata('Parola kodu gonderilemedi', hata);
-    yanit.status(502).json({ ok: false, hata: 'Kod gönderilemedi, biraz sonra tekrar dene' });
+    yanit.status(502).json({ ok: false, hata: 'kod-gonderilemedi' });
   }
 }
 
@@ -242,7 +242,7 @@ export async function sikayet(istek: Request, yanit: Response): Promise<void> {
 export async function engelEkle(istek: Request, yanit: Response): Promise<void> {
   const cozum = hedefGirdisi.safeParse(istek.body);
   if (!cozum.success) {
-    yanit.status(400).json({ ok: false, hata: 'Geçersiz oyuncu' });
+    yanit.status(400).json({ ok: false, hata: 'gecersiz-oyuncu' });
     return;
   }
   await moderasyon(yanit, async () => {
@@ -254,7 +254,7 @@ export async function engelEkle(istek: Request, yanit: Response): Promise<void> 
 export async function engelSil(istek: Request, yanit: Response): Promise<void> {
   const cozum = hedefGirdisi.safeParse(istek.body);
   if (!cozum.success) {
-    yanit.status(400).json({ ok: false, hata: 'Geçersiz oyuncu' });
+    yanit.status(400).json({ ok: false, hata: 'gecersiz-oyuncu' });
     return;
   }
   await moderasyon(yanit, async () => {

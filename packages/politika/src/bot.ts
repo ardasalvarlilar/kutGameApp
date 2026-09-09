@@ -206,17 +206,56 @@ export function acilisBul(
 
 // --- Atilacak tas ------------------------------------------------------------
 
+/**
+ * Dizmenin urettigi, GECERLI PER olan gruplar (3+ tas).
+ *
+ * Iki bolumden de topluyor: `seriDiz` ile `kutDiz` ayni eli farkli
+ * boler ve biri otekinin gormedigi peri bulabilir. Gruplar CAKISABILIR;
+ * ayiklamayi cagiran yapar.
+ */
+function gecerliGruplar(el: readonly Tas[]): Aday[] {
+  const gruplar: Aday[] = [];
+  for (const bolum of [seriDiz(el), kutDiz(el)]) {
+    for (const grup of bolum) {
+      if (grup.length < 3) continue;
+      if (!kutMu(grup).ok && !seriMu(grup).ok) continue;
+      gruplar.push(grup);
+    }
+  }
+  return gruplar;
+}
+
 /** Dizme sonucunda gecerli bir pere giren taslarin kimlikleri. */
 function perdekiTaslar(el: readonly Tas[]): Set<string> {
   const icinde = new Set<string>();
-  for (const gruplar of [seriDiz(el), kutDiz(el)]) {
-    for (const grup of gruplar) {
-      if (grup.length < 3) continue;
-      if (!kutMu(grup).ok && !seriMu(grup).ok) continue;
-      for (const tas of grup) icinde.add(tas.id);
-    }
+  for (const grup of gecerliGruplar(el)) {
+    for (const tas of grup) icinde.add(tas.id);
   }
   return icinde;
+}
+
+/**
+ * KURALLAR.md §6 — "Fazladan kut ve seri indirebilirsin."
+ *
+ * Actiktan sonra elde kalan gecerli perleri secer. Cakisan adaylardan UZUN
+ * OLANI tercih ediliyor: ayni taslari paylasan iki perden cok tas indiren
+ * daha iyi, elde kalan her tas el sonunda ceza demek.
+ *
+ * En az bir tas elde BIRAKILIR (§7): bitis son tasi ATARAK olur, indirmek
+ * eli bosaltamaz — motor da `son-tas-atilmali` ile reddederdi.
+ */
+export function indirilecekPerler(el: readonly Tas[]): Aday[] {
+  const adaylar = [...gecerliGruplar(el)].sort((a, b) => b.length - a.length);
+  const kullanilan = new Set<string>();
+  const secilen: Aday[] = [];
+
+  for (const grup of adaylar) {
+    if (grup.some((tas) => kullanilan.has(tas.id))) continue;
+    if (kullanilan.size + grup.length >= el.length) continue;
+    for (const tas of grup) kullanilan.add(tas.id);
+    secilen.push(grup);
+  }
+  return secilen;
 }
 
 /**
@@ -260,23 +299,93 @@ export function islenebilir(
   return null;
 }
 
+/** Tas ele katildiginda pere giren tas sayisi ne kadar artiyor? */
+function perKazanci(el: readonly Tas[], tas: Tas): number {
+  return perdekiTaslar([...el, tas]).size - perdekiTaslar(el).size;
+}
+
+/** Bu tas geldiginde turun acilis sarti karsilanir hale geliyor mu? */
+function acilisiAcarMi(gorunum: OyuncuGorunumu, oyuncu: OyuncuId, tas: Tas): boolean {
+  if (gorunum.acmisMi[oyuncu]) return false;
+  if (acilisBul(gorunum.istakam, gorunum.tur) !== null) return false;
+  return acilisBul([...gorunum.istakam, tas], gorunum.tur) !== null;
+}
+
 /**
- * Yerden alinan tas ele yarar mi? Perdeki tas sayisini artiriyorsa evet.
+ * Sirasi gelen bot yerden mi alsin, desteden mi ceksin?
+ *
+ * Bedelsiz (§5: atanin sagindaki taşı ücretsiz alır), o yuzden esik DUSUK:
+ * tas ele herhangi bir sekilde yariyorsa almak, desteden rastgele cekmekten
+ * iyidir. Eskiden esik "yeni bir per kurmali" idi (kazanc > 1) ve gorunur
+ * sonucu suydu: bot actiktan sonra elindeki perler yere indigi icin kazanc
+ * nadiren 2'yi buluyor, bot yerden tas almayi fiilen birakiyordu.
  *
  * §9 0.10'dan once burada bir kontrol daha vardi: tur 15'te "cifti bende"
  * talebi bekliyorsa bot yerden ALMAMALIYDI, yoksa motor reddediyor ve sira
  * kilitleniyordu. O talep artik kuyruga girmiyor — geldigi anda tasi aliyor
  * ve pencereyi kapatiyor, dolayisiyla bot pencere acikken hep alabilir.
  */
-function yerdenAlmaliMi(gorunum: OyuncuGorunumu): boolean {
+function yerdenAlmaliMi(gorunum: OyuncuGorunumu, oyuncu: OyuncuId): boolean {
   const pencere = gorunum.pencere;
   if (pencere === null) return false;
 
   const ustTas = gorunum.atikYiginlari[pencere.atan].ustTas;
   if (ustTas === null) return false;
-  const oncesi = perdekiTaslar(gorunum.istakam).size;
-  const sonrasi = perdekiTaslar([...gorunum.istakam, ustTas]).size;
-  return sonrasi > oncesi + 1;
+
+  if (acilisiAcarMi(gorunum, oyuncu, ustTas)) return true;
+  return perKazanci(gorunum.istakam, ustTas) > 0;
+}
+
+/**
+ * KURALLAR.md §5 — talep penceresi acikken botun karari.
+ *
+ * Sirasi gelmeyen oyuncu da atilan tasi alabilir; bedeli desteden bir ceza
+ * tasi ve 5 puandir. Bot bunu hic kullanmiyordu: `botAksiyonu` yalnizca sira
+ * ondayken cagriliyor, calma ise SIRA BASKASINDAYKEN yapilan bir hamle.
+ * Sonucu, masadaki tek "insan gibi" davranmayan sey oluyordu — insanlar
+ * calarken botlar sirasini bekliyordu.
+ *
+ * Surucu bunu pencere acildiginda cagirir. Talep BAGLAYICIDIR (§5.6):
+ * geri alinamaz, bu yuzden esik yerden almadakinden yuksek tutuldu.
+ */
+export function botTalebi(
+  gorunum: OyuncuGorunumu,
+  oyuncu: OyuncuId,
+  suAn: number,
+): Aksiyon | null {
+  if (gorunum.faz === 'el-bitti') return null;
+
+  const pencere = gorunum.pencere;
+  if (pencere === null) return null;
+  // Motorun reddedecegi talepleri hic gondermiyoruz: reddedilen bir hamle
+  // durumu degistirmiyor ve surucuyu bosuna dondururdu.
+  if (oyuncu === pencere.atan) return null;
+  if (oyuncu === gorunum.siradaki) return null;
+  if (pencere.talepler.includes(oyuncu)) return null;
+
+  // Tur 15 "cifti bende" (§5, §9 0.10): butun oncelikleri gecer ve turun
+  // acilis sarti zaten cift — elindeki tasin esini kacirmanin anlami yok.
+  // `ciftHakkim` uc sarti birden tasiyor: tur 15, es gercekten elde, henuz
+  // acilmamis.
+  if (pencere.ciftHakkim) return { tip: 'CIFT_TALEBI', oyuncu, suAn };
+
+  const ustTas = gorunum.atikYiginlari[pencere.atan].ustTas;
+  if (ustTas === null) return null;
+  // Calmanin bedeli desteden bir tas (§5); deste bossa motor reddeder.
+  if (gorunum.desteSayisi < 1) return null;
+
+  // Turun sartini actiriyorsa her zaman deger: acilmadan oyun ilerlemiyor.
+  if (acilisiAcarMi(gorunum, oyuncu, ustTas)) {
+    return { tip: 'CALMA_TALEBI', oyuncu, suAn };
+  }
+
+  // Aksi halde tas YENI BIR PER kurmali. Kazancin 3 olmasi, bosta duran iki
+  // tasin bu tasla pere donmesi demek. Kazanc 1 (mevcut peri uzatmak) calmaya
+  // degmez: 5 puan + elde kalabilecek bir ceza tasi, tek taslik uzatmadan
+  // pahali.
+  return perKazanci(gorunum.istakam, ustTas) >= 3
+    ? { tip: 'CALMA_TALEBI', oyuncu, suAn }
+    : null;
 }
 
 /**
@@ -291,7 +400,7 @@ export function botAksiyonu(
   if (gorunum.faz === 'el-bitti') return null;
 
   if (gorunum.faz === 'cekme') {
-    return yerdenAlmaliMi(gorunum)
+    return yerdenAlmaliMi(gorunum, oyuncu)
       ? { tip: 'CEK_ATIKTAN', oyuncu, suAn }
       : { tip: 'CEK_DESTEDEN', oyuncu, suAn };
   }
@@ -312,6 +421,20 @@ export function botAksiyonu(
     // §6: acilis hamlesinde isleme yok, bir tur donmesi gerekiyor.
     // Elde tas kalmasi sarti (§7) motorda kontrol ediliyor.
     if (gorunum.istakam.length > 1) {
+      // Once FAZLADAN PER (§6): bir hamlede 3+ tas indirir. Isleme tek tas
+      // gonderiyor ve `islenebilir` ilk uyan tasi seciyor — o tas elde
+      // kurulmus bir perin parcasiysa peri bozar, sonra 3 tas yerine 1 tas
+      // inmis olur. Sirayi tersine cevirmek bunu onluyor.
+      const perler = indirilecekPerler(gorunum.istakam);
+      if (perler.length > 0) {
+        return {
+          tip: 'PER_INDIR',
+          oyuncu,
+          perler: perler.map((per) => per.map((tas) => tas.id)),
+          suAn,
+        };
+      }
+
       const hedef = islenebilir(gorunum);
       if (hedef !== null) {
         return { tip: 'ISLE', oyuncu, perId: hedef.perId, tasIdler: [hedef.tasId], suAn };

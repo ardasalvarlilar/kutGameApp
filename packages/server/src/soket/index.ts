@@ -41,6 +41,7 @@ import {
   masaGorunumu,
   masaKur,
   masadanCik,
+  koltuguBotaDevret,
   masayaKatil,
 } from '../servisler/masaServisi.js';
 import { Oyuncu } from '../modeller/Oyuncu.js';
@@ -103,7 +104,7 @@ function oyuncuId(soket: Socket): string {
 function hataMesaji(hata: unknown): string {
   if (hata instanceof MasaHatasi) return hata.message;
   kayit.hata('Beklenmeyen soket hatasi', hata);
-  return 'Beklenmeyen bir hata oldu';
+  return 'beklenmeyen-hata';
 }
 
 // --- Masa akisi --------------------------------------------------------------
@@ -264,14 +265,14 @@ export function soketiKur(io: Server): void {
   // Baglanti kurulmadan once dogrulanir; jetonsuz soket hic acilmaz.
   io.use(async (soket, sonraki) => {
     const jeton = (soket.handshake.auth as { jeton?: string } | undefined)?.jeton;
-    if (typeof jeton !== 'string') return sonraki(new Error('Jeton gerekli'));
+    if (typeof jeton !== 'string') return sonraki(new Error('jeton-gerekli'));
 
     const icerik = jetonuCoz(jeton);
-    if (icerik === null) return sonraki(new Error('Jeton geçersiz'));
+    if (icerik === null) return sonraki(new Error('jeton-gecersiz'));
 
     const oyuncu = await Oyuncu.findById(icerik.oyuncuId).select('ad engelli').lean();
-    if (oyuncu === null) return sonraki(new Error('Oyuncu bulunamadı'));
-    if (oyuncu.engelli) return sonraki(new Error('Hesabın askıya alınmış'));
+    if (oyuncu === null) return sonraki(new Error('oyuncu-bulunamadi'));
+    if (oyuncu.engelli) return sonraki(new Error('hesap-askida'));
 
     soket.data.oyuncuId = icerik.oyuncuId;
     soket.data.ad = oyuncu.ad;
@@ -353,7 +354,7 @@ export function soketiKur(io: Server): void {
 
     soket.on('masa:katil', async (girdi: unknown, yanit: (s: Yanit<unknown>) => void) => {
       const cozum = katilSemasi.safeParse(girdi);
-      if (!cozum.success) return yanit(basarisiz('Masa kodu geçersiz'));
+      if (!cozum.success) return yanit(basarisiz('masa-kodu-gecersiz'));
       try {
         const masa = await masayaKatil(cozum.data.kod, kimlik);
         const masaId = String(masa._id);
@@ -401,7 +402,7 @@ export function soketiKur(io: Server): void {
 
     soket.on('masa:hazir', async (girdi: unknown, yanit: (s: Yanit<unknown>) => void) => {
       const cozum = hazirSemasi.safeParse(girdi);
-      if (!cozum.success) return yanit(basarisiz('Geçersiz istek'));
+      if (!cozum.success) return yanit(basarisiz('gecersiz-istek'));
       try {
         const masa = await hazirDurumu(kimlik, cozum.data.hazir);
         const masaId = String(masa._id);
@@ -440,25 +441,25 @@ export function soketiKur(io: Server): void {
 
     soket.on('masa:botCikar', async (girdi: unknown, yanit: (s: Yanit<unknown>) => void) => {
       const cozum = koltukSemasi.safeParse(girdi);
-      if (!cozum.success) return yanit(basarisiz('Geçersiz koltuk'));
+      if (!cozum.success) return yanit(basarisiz('gecersiz-koltuk'));
       await duzeniDegistir(yanit, () => botuCikar(kimlik, cozum.data.koltuk));
     });
 
     soket.on('masa:koltugaGec', async (girdi: unknown, yanit: (s: Yanit<unknown>) => void) => {
       const cozum = koltukSemasi.safeParse(girdi);
-      if (!cozum.success) return yanit(basarisiz('Geçersiz koltuk'));
+      if (!cozum.success) return yanit(basarisiz('gecersiz-koltuk'));
       await duzeniDegistir(yanit, () => koltugaGec(kimlik, cozum.data.koltuk));
     });
 
     soket.on('masa:koltukTalebi', async (girdi: unknown, yanit: (s: Yanit<unknown>) => void) => {
       const cozum = koltukSemasi.safeParse(girdi);
-      if (!cozum.success) return yanit(basarisiz('Geçersiz koltuk'));
+      if (!cozum.success) return yanit(basarisiz('gecersiz-koltuk'));
       await duzeniDegistir(yanit, () => koltukTalebiGonder(kimlik, cozum.data.koltuk));
     });
 
     soket.on('masa:koltukCevap', async (girdi: unknown, yanit: (s: Yanit<unknown>) => void) => {
       const cozum = koltukCevapSemasi.safeParse(girdi);
-      if (!cozum.success) return yanit(basarisiz('Geçersiz istek'));
+      if (!cozum.success) return yanit(basarisiz('gecersiz-istek'));
       await duzeniDegistir(yanit, () =>
         koltukTalebiCevapla(kimlik, cozum.data.isteyenId, cozum.data.kabul),
       );
@@ -473,14 +474,20 @@ export function soketiKur(io: Server): void {
         }
 
         const masaId = String(mevcut._id);
-        // Oyun basladiysa koltuk KALIR (MIMARI.md §3): dort koltuk dolu
-        // olmadan motor ilerleyemez. Sunucu onun yerine oynar; geri gelen
-        // `masa:benim` ile ayni koltuga oturur.
+        // Oyun basladiysa koltuk BOSALMAZ ama oyuncuda da kalmaz: yerine BOT
+        // oturur (MIMARI.md §3 — motor dort koltuk bekliyor). Koltugu oyuncuda
+        // birakmak "masadan cikamiyorum"a yol aciyordu: gorunum kisisel odaya
+        // gittigi icin ekran masaya geri sicriyor, acik masasi durdugu icin
+        // yeni masa da acamiyordu.
         if (mevcut.durum === 'oynaniyor') {
-          oturumlar.get(masaId)?.baglantiDurumu(kimlik, false);
+          oturumlar.get(masaId)?.botaDevret(kimlik);
+          const masa = await koltuguBotaDevret(kimlik);
           await soket.leave(`masa:${masaId}`);
           soket.data.masaId = null;
-          await masayiYay(io, masaId);
+          if (masa !== null) {
+            if (masa.durum === 'bitti') oturumuBitir(io, masaId, 'Masa kapandı');
+            else await masayiYay(io, masaId);
+          }
           return yanit(basarili(null));
         }
 
@@ -501,16 +508,16 @@ export function soketiKur(io: Server): void {
 
     soket.on('oyun:aksiyon', (girdi: unknown, yanit: (s: Yanit<unknown>) => void) => {
       const cozum = aksiyonSemasi.safeParse(girdi);
-      if (!cozum.success) return yanit(basarisiz('Geçersiz aksiyon'));
+      if (!cozum.success) return yanit(basarisiz('gecersiz-aksiyon'));
 
       const masaId = soket.data.masaId as string | null;
-      if (masaId === null) return yanit(basarisiz('Bir masada değilsin'));
+      if (masaId === null) return yanit(basarisiz('masada-degilsin'));
 
       const oturum = oturumlar.get(masaId);
-      if (oturum === undefined) return yanit(basarisiz('Masada oyun yok'));
+      if (oturum === undefined) return yanit(basarisiz('masada-oyun-yok'));
 
       const sonuc = oturum.aksiyon(kimlik, cozum.data.aksiyon as never, cozum.data.hamleNo);
-      yanit(sonuc.ok ? basarili(null) : basarisiz(sonuc.hata ?? 'Hamle reddedildi'));
+      yanit(sonuc.ok ? basarili(null) : basarisiz(sonuc.hata ?? 'hamle-reddedildi'));
     });
 
     // --- Kopma ---------------------------------------------------------------

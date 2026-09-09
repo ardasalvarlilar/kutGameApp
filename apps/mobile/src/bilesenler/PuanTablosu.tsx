@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { OYUNCULAR, type ElSonucu, type OyuncuId, type OyuncuKaydi } from '@kut/engine';
+import { useCeviri } from '../dil';
 import { renkler } from '../tema';
 
 /**
@@ -8,7 +9,8 @@ import { renkler } from '../tema';
  *
  * KURALLAR.md §8 — her elin sonunda oyuncunun istakasinda kalan taslarin
  * toplami ceza olarak yazilir; acamayan iki kati, biri okeyle bittiyse yine
- * iki kati (ikisi birden dort kat) yazar. Eli bitiren -100 alir.
+ * iki kati (ikisi birden dort kat) yazar. Eli bitiren -100, son tasi okey
+ * atarak bitirdiyse -200 alir (§9 0.11).
  *
  * Tablo bunlari AYRISTIRARAK gosteriyor: oyuncu neden o puani aldigini
  * gorebilmeli, yoksa carpanlar keyfi hissettiriyor.
@@ -65,29 +67,34 @@ export function PuanTablosu({
     return () => clearInterval(sayac);
   }, [macBitti, geriSayimSn, onSonrakiTur]);
 
+  const t = useCeviri();
   const siralama = [...OYUNCULAR].sort((a, b) => macPuanlari[a] - macPuanlari[b]);
 
   return (
     <View style={stil.perde}>
       <View style={stil.kutu}>
         <Text style={stil.baslik}>
-          {macBitti ? 'MAÇ BİTTİ' : `TUR ${tur} SONUCU`}
+          {macBitti ? t('puan.macBitti') : t('puan.turSonucu', { tur })}
         </Text>
         <Text style={stil.altBaslik}>
           {macBitti
-            ? `${macKazananlari.map((o) => adlar[o]).join(' ve ')} kazandı — en düşük puan`
+            ? t('puan.macKazanani', {
+                adlar: macKazananlari.map((o) => adlar[o]).join(' · '),
+              })
             : sonuc.kazanan === null
-              ? 'Deste tükendi — kazanan yok'
-              : `${adlar[sonuc.kazanan]} bitirdi${sonuc.okeyleBitti ? ' · okeyle!' : ''}`}
+              ? t('puan.desteTukendi')
+              : t(sonuc.okeyleBitti ? 'puan.bitirdiOkeyle' : 'puan.bitirdi', {
+                  ad: adlar[sonuc.kazanan],
+                })}
         </Text>
 
         <ScrollView style={stil.kaydirici} showsVerticalScrollIndicator={false}>
           <View style={stil.satir}>
-            <Text style={[stil.baslikHucre, stil.adSutunu]}>OYUNCU</Text>
-            {!macBitti ? <Text style={stil.baslikHucre}>ELDE</Text> : null}
-            {!macBitti ? <Text style={stil.baslikHucre}>×</Text> : null}
-            {!macBitti ? <Text style={stil.baslikHucre}>BU EL</Text> : null}
-            <Text style={[stil.baslikHucre, stil.toplamSutunu]}>TOPLAM</Text>
+            <Text style={[stil.baslikHucre, stil.adSutunu]}>{t('puan.oyuncu')}</Text>
+            {!macBitti ? <Text style={stil.baslikHucre}>{t('puan.elde')}</Text> : null}
+            {!macBitti ? <Text style={stil.baslikHucre}>{t('puan.carpan')}</Text> : null}
+            {!macBitti ? <Text style={stil.baslikHucre}>{t('puan.buEl')}</Text> : null}
+            <Text style={[stil.baslikHucre, stil.toplamSutunu]}>{t('puan.toplam')}</Text>
           </View>
 
           {siralama.map((oyuncu, sira) => {
@@ -127,29 +134,26 @@ export function PuanTablosu({
 
         {/* Cezanin nereden geldigi acikca yazsin; carpan keyfi gorunmesin. */}
         {!macBitti ? (
-          <Text style={stil.aciklama}>
-            Elde kalan sayılar × çarpan. Açamayan ×2, biri okeyle bitmişse ×2 —
-            ikisi birden ×4. Bitiren −100.
-          </Text>
+          <Text style={stil.aciklama}>{t('puan.aciklama')}</Text>
         ) : (
-          <Text style={stil.aciklama}>16 tur tamamlandı. En düşük puan kazanır.</Text>
+          <Text style={stil.aciklama}>{t('puan.macAciklama')}</Text>
         )}
 
         <View style={stil.dugmeler}>
           {macBitti ? (
             <Pressable onPress={onYeniMac} style={[stil.dugme, stil.dugmeVurgu]}>
-              <Text style={stil.dugmeMetinVurgu}>YENİ MAÇ</Text>
+              <Text style={stil.dugmeMetinVurgu}>{t('puan.yeniMac')}</Text>
             </Pressable>
           ) : onSonrakiTur !== null ? (
             <Pressable onPress={onSonrakiTur} style={[stil.dugme, stil.dugmeVurgu]}>
               <Text style={stil.dugmeMetinVurgu}>
-                SONRAKİ TUR{kalan > 0 ? ` (${kalan})` : ''}
+                {kalan > 0 ? t('puan.sonrakiTurSayac', { kalan }) : t('puan.sonrakiTur')}
               </Text>
             </Pressable>
           ) : (
             <View style={[stil.dugme, stil.bekleme]}>
               <Text style={stil.beklemeMetin}>
-                {kalan > 0 ? `SONRAKİ EL ${kalan} SN İÇİNDE` : 'EL DAĞITILIYOR…'}
+                {kalan > 0 ? t('puan.sonrakiEl', { kalan }) : t('puan.elDagitiliyor')}
               </Text>
             </View>
           )}

@@ -82,7 +82,7 @@ export async function jetonKaydet(
   platform: BildirimPlatformu,
 ): Promise<void> {
   const temiz = jeton.trim();
-  if (!jetonGecerliMi(temiz)) throw new BildirimHatasi('Geçersiz bildirim jetonu');
+  if (!jetonGecerliMi(temiz)) throw new BildirimHatasi('gecersiz-bildirim-jetonu');
 
   // Cihaz baska hesaba bagliysa oradan cikar.
   await Oyuncu.updateMany(

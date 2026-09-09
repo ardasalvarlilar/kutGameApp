@@ -41,7 +41,7 @@ interface Ileti {
 
 async function gonder(ileti: Ileti): Promise<void> {
   if (!config.posta.acikMi) {
-    throw new PostaHatasi('E-posta gönderimi bu sunucuda ayarlı değil');
+    throw new PostaHatasi('eposta-ayarli-degil');
   }
   await tasiyiciyiAl().sendMail({
     from: `"${config.uygulamaAdi}" <${config.posta.gonderen}>`,

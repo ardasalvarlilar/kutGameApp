@@ -35,7 +35,7 @@ async function benzersizKod(): Promise<string> {
     const kod = kodUret(config.oda.kodUzunlugu);
     if ((await Masa.countDocuments({ kod })) === 0) return kod;
   }
-  throw new MasaHatasi('Masa kodu üretilemedi, tekrar dene');
+  throw new MasaHatasi('masa-kodu-uretilemedi');
 }
 
 /** Bos koltuklarin en kucugu; masa doluysa null. */
@@ -195,7 +195,7 @@ export async function botlariDoldur(oyuncuId: string) {
   for (let no = 0; no < MASA_KAPASITESI; no++) {
     if (!dolu.has(no)) eklenecek.push({ no, bot: true, hazir: true });
   }
-  if (eklenecek.length === 0) throw new MasaHatasi('Masada boş koltuk yok');
+  if (eklenecek.length === 0) throw new MasaHatasi('bos-koltuk-yok');
 
   // Atomik: bu arada biri oturduysa masa dolar ve kosul tutmaz.
   const guncel = await Masa.findOneAndUpdate(
@@ -207,7 +207,7 @@ export async function botlariDoldur(oyuncuId: string) {
     { $push: { koltuklar: { $each: eklenecek } }, $unset: { kapanmaZamani: '' } },
     { new: true },
   );
-  if (guncel === null) throw new MasaHatasi('Masa bu arada doldu, tekrar dene');
+  if (guncel === null) throw new MasaHatasi('masa-doldu-tekrar');
   return guncel;
 }
 
@@ -215,7 +215,7 @@ export async function botlariDoldur(oyuncuId: string) {
 export async function botuCikar(oyuncuId: string, koltuk: number) {
   const masa = await sahibiOldugumMasa(oyuncuId);
   const hedef = masa.koltuklar.find((k) => k.no === koltuk);
-  if (hedef === undefined || !hedef.bot) throw new MasaHatasi('O koltukta bot yok');
+  if (hedef === undefined || !hedef.bot) throw new MasaHatasi('koltukta-bot-yok');
 
   masa.set(
     'koltuklar',
@@ -228,9 +228,9 @@ export async function botuCikar(oyuncuId: string, koltuk: number) {
 /** Sahibi oldugum, hala bekleyen masa. Bot ve koltuk islemlerinin on kosulu. */
 async function sahibiOldugumMasa(oyuncuId: string) {
   const masa = await acikMasam(oyuncuId);
-  if (masa === null) throw new MasaHatasi('Bir masada değilsin');
-  if (masa.durum !== 'bekliyor') throw new MasaHatasi('Oyun başladı');
-  if (String(masa.sahip) !== oyuncuId) throw new MasaHatasi('Bunu yalnızca masayı açan yapabilir');
+  if (masa === null) throw new MasaHatasi('masada-degilsin');
+  if (masa.durum !== 'bekliyor') throw new MasaHatasi('oyun-basladi');
+  if (String(masa.sahip) !== oyuncuId) throw new MasaHatasi('masa-sahibi-degilsin');
   return masa;
 }
 
@@ -247,17 +247,17 @@ async function sahibiOldugumMasa(oyuncuId: string) {
 /** Bos bir koltuga gecer. Atomik: koltugu bu arada baskasi kapabilir. */
 export async function koltugaGec(oyuncuId: string, hedefKoltuk: number) {
   if (!Number.isInteger(hedefKoltuk) || hedefKoltuk < 0 || hedefKoltuk >= MASA_KAPASITESI) {
-    throw new MasaHatasi('Geçersiz koltuk');
+    throw new MasaHatasi('gecersiz-koltuk');
   }
   const masa = await acikMasam(oyuncuId);
-  if (masa === null) throw new MasaHatasi('Bir masada değilsin');
-  if (masa.durum !== 'bekliyor') throw new MasaHatasi('Oyun başladı');
+  if (masa === null) throw new MasaHatasi('masada-degilsin');
+  if (masa.durum !== 'bekliyor') throw new MasaHatasi('oyun-basladi');
 
   const benim = masa.koltuklar.find((k) => String(k.oyuncu) === oyuncuId);
-  if (benim === undefined) throw new MasaHatasi('Bu masada koltuğun yok');
+  if (benim === undefined) throw new MasaHatasi('koltugun-yok');
   if (benim.no === hedefKoltuk) return masa;
   if (masa.koltuklar.some((k) => k.no === hedefKoltuk)) {
-    throw new MasaHatasi('O koltuk dolu — yerini isteyebilirsin');
+    throw new MasaHatasi('koltuk-dolu-iste');
   }
 
   // Tek islemde: eski koltugu cikar, yenisini koy. Filtre "hedef HALA bos".
@@ -266,24 +266,24 @@ export async function koltugaGec(oyuncuId: string, hedefKoltuk: number) {
     { $set: { 'koltuklar.$[benim].no': hedefKoltuk } },
     { new: true, arrayFilters: [{ 'benim.oyuncu': new Types.ObjectId(oyuncuId) }] },
   );
-  if (guncel === null) throw new MasaHatasi('O koltuğu bu arada biri aldı');
+  if (guncel === null) throw new MasaHatasi('koltuk-kapildi');
   return guncel;
 }
 
 /** Dolu bir koltuk icin degistirme talebi birakir. */
 export async function koltukTalebiGonder(oyuncuId: string, hedefKoltuk: number) {
   const masa = await acikMasam(oyuncuId);
-  if (masa === null) throw new MasaHatasi('Bir masada değilsin');
-  if (masa.durum !== 'bekliyor') throw new MasaHatasi('Oyun başladı');
+  if (masa === null) throw new MasaHatasi('masada-degilsin');
+  if (masa.durum !== 'bekliyor') throw new MasaHatasi('oyun-basladi');
 
   const benim = masa.koltuklar.find((k) => String(k.oyuncu) === oyuncuId);
-  if (benim === undefined) throw new MasaHatasi('Bu masada koltuğun yok');
-  if (benim.no === hedefKoltuk) throw new MasaHatasi('Zaten o koltuktasın');
+  if (benim === undefined) throw new MasaHatasi('koltugun-yok');
+  if (benim.no === hedefKoltuk) throw new MasaHatasi('zaten-o-koltukta');
 
   const hedef = masa.koltuklar.find((k) => k.no === hedefKoltuk);
-  if (hedef === undefined) throw new MasaHatasi('O koltuk boş — doğrudan geçebilirsin');
+  if (hedef === undefined) throw new MasaHatasi('koltuk-bos-dogrudan-gec');
   // Bot kimseye sormaz: sahibi onu zaten cikarabiliyor.
-  if (hedef.bot) throw new MasaHatasi('Bot koltuğu için talep gerekmez');
+  if (hedef.bot) throw new MasaHatasi('bot-koltugu-talep-gerekmez');
 
   await Masa.updateOne(
     { _id: masa._id },
@@ -308,11 +308,11 @@ export async function koltukTalebiGonder(oyuncuId: string, hedefKoltuk: number) 
  */
 export async function koltukTalebiCevapla(oyuncuId: string, isteyenId: string, kabul: boolean) {
   const masa = await acikMasam(oyuncuId);
-  if (masa === null) throw new MasaHatasi('Bir masada değilsin');
-  if (masa.durum !== 'bekliyor') throw new MasaHatasi('Oyun başladı');
+  if (masa === null) throw new MasaHatasi('masada-degilsin');
+  if (masa.durum !== 'bekliyor') throw new MasaHatasi('oyun-basladi');
 
   const talep = masa.koltukTalepleri.find((t) => String(t.isteyen) === isteyenId);
-  if (talep === undefined) throw new MasaHatasi('Böyle bir talep yok');
+  if (talep === undefined) throw new MasaHatasi('talep-yok');
 
   const benim = masa.koltuklar.find((k) => String(k.oyuncu) === oyuncuId);
   if (benim === undefined || benim.no !== talep.hedefKoltuk) {
@@ -322,12 +322,12 @@ export async function koltukTalebiCevapla(oyuncuId: string, isteyenId: string, k
       masa.koltukTalepleri.filter((t) => String(t.isteyen) !== isteyenId),
     );
     await masa.save();
-    throw new MasaHatasi('Bu talep artık geçerli değil');
+    throw new MasaHatasi('talep-gecersiz');
   }
 
   if (kabul) {
     const isteyen = masa.koltuklar.find((k) => String(k.oyuncu) === isteyenId);
-    if (isteyen === undefined) throw new MasaHatasi('İsteyen oyuncu masadan çıkmış');
+    if (isteyen === undefined) throw new MasaHatasi('isteyen-masadan-cikmis');
     const benimNo = benim.no;
     benim.no = isteyen.no;
     isteyen.no = benimNo;
@@ -343,7 +343,7 @@ export async function koltukTalebiCevapla(oyuncuId: string, isteyenId: string, k
 
 export async function masaKur(oyuncuId: string, ozel = true) {
   if ((await acikMasam(oyuncuId)) !== null) {
-    throw new MasaHatasi('Zaten bir masadasın; önce oradan çık');
+    throw new MasaHatasi('zaten-masadasin');
   }
   const kod = await benzersizKod();
   return Masa.create({
@@ -411,25 +411,25 @@ export async function masayaKatil(kod: string, oyuncuId: string) {
 
   for (let deneme = 0; deneme < KOLTUK_DENEMESI; deneme++) {
     const masa = await Masa.findOne({ kod: temizKod });
-    if (masa === null) throw new MasaHatasi('Böyle bir masa yok');
-    if (masa.durum === 'bitti') throw new MasaHatasi('Bu masa kapandı');
+    if (masa === null) throw new MasaHatasi('masa-bulunamadi');
+    if (masa.durum === 'bitti') throw new MasaHatasi('masa-kapandi');
 
     const zatenVar = masa.koltuklar.some((koltuk) => String(koltuk.oyuncu) === oyuncuId);
     if (zatenVar) return masa; // Yeniden baglanma: koltugu duruyor.
 
-    if (masa.durum === 'oynaniyor') throw new MasaHatasi('Masada oyun başlamış');
+    if (masa.durum === 'oynaniyor') throw new MasaHatasi('masa-basladi');
 
     const baskaMasa = await acikMasam(oyuncuId);
-    if (baskaMasa !== null) throw new MasaHatasi('Zaten bir masadasın; önce oradan çık');
+    if (baskaMasa !== null) throw new MasaHatasi('zaten-masadasin');
 
     const koltuk = bosKoltuk(masa);
-    if (koltuk === null) throw new MasaHatasi('Masa dolu');
+    if (koltuk === null) throw new MasaHatasi('masa-dolu');
 
     // Engelin GERCEK bir karsiligi olmali (App Store 1.2). Engelledigin ya da
     // seni engelleyen biriyle ayni masaya oturmuyorsun — kodu bilse bile.
     const oturanlar = masa.koltuklar.filter((k) => !k.bot).map((k) => String(k.oyuncu));
     if (await engelliBiriVarMi(oyuncuId, oturanlar)) {
-      throw new MasaHatasi('Bu masada engellediğin bir oyuncu var');
+      throw new MasaHatasi('masada-engelli-oyuncu');
     }
 
     const guncel = await Masa.findOneAndUpdate(
@@ -455,17 +455,66 @@ export async function masayaKatil(kod: string, oyuncuId: string) {
     if (guncel !== null) return guncel;
   }
 
-  throw new MasaHatasi('Masa şu an çok yoğun, tekrar dene');
+  throw new MasaHatasi('masa-yogun');
 }
 
 /**
- * Masadan cikma.
+ * Oyun SURERKEN masadan ayrilma: koltuk BOTA devredilir.
  *
- * Oyun BASLAMISSA koltuk bosalmaz (MIMARI.md §3): dort koltuk dolu olmadan
- * motor ilerleyemez, cikan biri masayi kilitlerdi. Cikan oyuncunun yerine
- * sunucu oynar; geri gelirse ayni koltuga oturur. Bu yuzden `oynaniyor`
- * durumunda bu fonksiyon hicbir sey yapmaz ve null doner — cagiran, koltugu
- * korurken soketi odadan cikarir.
+ * Dort koltuk dolu olmadan motor ilerlemiyor, bu yuzden koltugu bosaltmak
+ * eli kilitlerdi. Onceki cozum koltugu oyuncunun ustunde birakmakti; sonucu
+ * "masadan cikamiyorum" oldu ve iki yerden birden geliyordu:
+ *
+ *  1. `oyun:gorunum` masa odasina degil KISISEL odaya gidiyor. Soketi masa
+ *     odasindan cikarmak paketleri kesmiyordu; istemci lobiye donuyor, ilk
+ *     gorunum paketinde masaya geri sicriyordu.
+ *  2. Koltuk durdugu icin `acikMasam` hala o masayi donduruyordu — oyuncu
+ *     "Zaten bir masadasin" ile yeni masa da acamiyordu.
+ *
+ * Koltugu bota devretmek ikisini birden cozuyor: oyuncu `insanlar`
+ * listesinden dusuyor (gorunum gitmiyor) ve acik masasi kalmiyor. Bot
+ * koltugu altyapisi zaten vardi (`masa:botDoldur`), yeni bir kavram degil.
+ *
+ * Geri donus yok: ele devam eden bot. Ekran bunu onay sorarak soyluyor.
+ */
+export async function koltuguBotaDevret(oyuncuId: string) {
+  const masa = await acikMasam(oyuncuId);
+  if (masa === null) return null;
+  if (masa.durum !== 'oynaniyor') return null;
+  if (!masa.koltuklar.some((koltuk) => String(koltuk.oyuncu) === oyuncuId)) return null;
+
+  // Mongoose alt-belge dizisine duz dizi atanamiyor; `set` ile veriyoruz.
+  // Devredilen koltuk `oyuncu` alanini HIC tasimamali (bot koltugunun sozlesmesi).
+  masa.set(
+    'koltuklar',
+    masa.koltuklar.map((koltuk) =>
+      String(koltuk.oyuncu) === oyuncuId
+        ? { no: koltuk.no, bot: true, hazir: true }
+        : { no: koltuk.no, oyuncu: koltuk.oyuncu, bot: koltuk.bot, hazir: koltuk.hazir },
+    ),
+  );
+
+  const insanlar = masa.koltuklar.filter((koltuk) => !koltuk.bot);
+  if (insanlar.length === 0) {
+    // Son insan da cikti: botlarin kendi kendine oynadigi masayi ayakta
+    // tutmanin anlami yok.
+    masa.durum = 'bitti';
+    masa.set('kapanmaZamani', new Date());
+  } else if (String(masa.sahip) === oyuncuId) {
+    const yeniSahip = insanlar.slice().sort((a, b) => a.no - b.no)[0];
+    if (yeniSahip?.oyuncu != null) masa.sahip = yeniSahip.oyuncu;
+  }
+
+  await masa.save();
+  return masa;
+}
+
+/**
+ * Masadan cikma — BEKLEYEN masa icin.
+ *
+ * Oyun basladiysa koltuk bosaltilamaz (motor dort oyuncu bekliyor); o durumda
+ * cagiran `koltuguBotaDevret`i kullanir. Burasi `oynaniyor` masada hicbir sey
+ * yapmaz ve null doner.
  */
 export async function masadanCik(oyuncuId: string) {
   const masa = await acikMasam(oyuncuId);
@@ -501,10 +550,10 @@ export async function masadanCik(oyuncuId: string) {
 
 export async function hazirDurumu(oyuncuId: string, hazir: boolean) {
   const masa = await acikMasam(oyuncuId);
-  if (masa === null) throw new MasaHatasi('Bir masada değilsin');
+  if (masa === null) throw new MasaHatasi('masada-degilsin');
 
   const koltuk = masa.koltuklar.find((k) => String(k.oyuncu) === oyuncuId);
-  if (koltuk === undefined) throw new MasaHatasi('Bu masada koltuğun yok');
+  if (koltuk === undefined) throw new MasaHatasi('koltugun-yok');
 
   koltuk.hazir = hazir;
   await masa.save();

@@ -89,7 +89,7 @@ describe.skipIf(!mongoVar)('hesap acma', () => {
       ad: 'Iki',
     });
     expect(durum).toBe(400);
-    expect(cevap.hata).toContain('zaten kayıtlı');
+    expect(cevap.hata).toBe('eposta-zaten-kayitli');
   });
 
   it('kisa parola reddediliyor', async () => {

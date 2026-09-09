@@ -3,7 +3,13 @@
 // oyuncunun gormemesi gereken hicbir sey icermez. Botlar da bunu kullanir —
 // bot insandan fazlasini gormez.
 
-import { birTurDonduMu, type Faz, type OyunDurumu, type YerPeri } from './durum';
+import {
+  birTurDonduMu,
+  type TasHareketi,
+  type Faz,
+  type OyunDurumu,
+  type YerPeri,
+} from './durum';
 import type { KuralAyarlari } from './kurallar';
 import type { ElSonucu } from './puan';
 import { islerMi, okeyCekmeAdaylari, perdekiOkeyler } from './per';
@@ -115,6 +121,17 @@ export interface OyuncuGorunumu {
    * obeginden eksilen tasin kime gittigini gostermeye yariyor.
    */
   readonly sonCalan: OyuncuId | null;
+  /**
+   * Son tas hareketleri — ekran animasyonu icin.
+   *
+   * PROJEKSIYON GEREKTIRMIYOR: hareketlerdeki taslar yalnizca herkesin
+   * gordugu taslar; desteden cekilen `tas: null` geliyor. Yani burada
+   * ayiklanacak gizli bilgi yok, alan oldugu gibi geciyor (motor kurali #3
+   * kaynaginda saglaniyor).
+   */
+  readonly sonHareketler: readonly TasHareketi[];
+  /** Verilmis en buyuk sira numarasi; istemci tekrari boyle eliyor. */
+  readonly sonHareketNo: number;
   readonly sonuc: ElSonucu | null;
 }
 
@@ -210,6 +227,8 @@ export function viewFor(durum: OyunDurumu, oyuncu: OyuncuId): OyuncuGorunumu {
     okeyFirsatlarim: okeyFirsatlari(durum, oyuncu),
     pencere: pencereGorunumu,
     sonCalan: durum.sonCalan,
+    sonHareketler: durum.sonHareketler,
+    sonHareketNo: durum.sonHareketNo,
     sonuc: durum.sonuc,
   };
 }

@@ -8,7 +8,7 @@ import {
   type OyuncuId,
   type TurNo,
 } from '@kut/engine';
-import { atilacakTas, botAksiyonu } from '../src/bot';
+import { atilacakTas, botAksiyonu, botTalebi } from '../src/bot';
 
 // Dort yer tutucu oyuncuyla bastan sona el oynatir.
 // Amaci iki sey: botun gecerli hamle uretmesi ve gercekten acabilmesi.
@@ -128,5 +128,123 @@ describe('bot simulasyonu — butun turlar', () => {
         expect(typeof el.durum.sonuc?.puanlar[oyuncu], `tur ${tur}`).toBe('number');
       }
     }
+  });
+});
+
+// --- Calmali simulasyon ------------------------------------------------------
+//
+// Yukaridaki dongude yalnizca SIRASI GELEN oynuyor. Calma ise sira
+// baskasindayken yapilan bir hamle (KURALLAR.md §5) ve eli kalici olarak
+// buyutuyor: her calis +2 tas (calinan + ceza tasi). Ayri bir simulasyon
+// gerekiyordu, cunku asil risk tam da burada: botun urettigi bir talep motorca
+// reddedilirse durum degismiyor ve sira KILITLENIYOR.
+
+interface CalmaliSonuc extends ElSonucu {
+  readonly talep: number;
+  readonly reddedilenTalep: number;
+}
+
+function eliCalarakOyna(tur: TurNo, tohum: number, hamleSiniri = 800): CalmaliSonuc {
+  let durum = elBaslat({ tur, baslayan: 0, tohum });
+  let hamle = 0;
+  let reddedilen = 0;
+  let talep = 0;
+  let reddedilenTalep = 0;
+  let suAn = 0;
+
+  /**
+   * Pencere acikken sirasi gelmeyen botlarin talebi.
+   *
+   * Durumu parametre alip geri donduruyor, disaridaki `durum`u kapatip
+   * degistirmiyor: oyle yapinca TypeScript while kosulundan gelen daralmayi
+   * koruyor ve dongudeki `faz === 'el-bitti'` kontrolu "imkansiz" sayiliyor.
+   */
+  const talepleriTopla = (baslangic: OyunDurumu): OyunDurumu => {
+    let anlik = baslangic;
+    for (const koltuk of OYUNCULAR) {
+      if (anlik.pencere === null) return anlik;
+      const aksiyon = botTalebi(viewFor(anlik, koltuk), koltuk, suAn);
+      if (aksiyon === null) continue;
+
+      talep += 1;
+      const sonuc = reduce(anlik, aksiyon);
+      if (sonuc.ok) anlik = sonuc.state;
+      else reddedilenTalep += 1;
+    }
+    return anlik;
+  };
+
+  while (durum.faz !== 'el-bitti' && hamle < hamleSiniri) {
+    durum = talepleriTopla(durum);
+    if (durum.faz === 'el-bitti') break;
+
+    const siradaki = durum.siradaki;
+    suAn += 5000;
+
+    const aksiyon = botAksiyonu(viewFor(durum, siradaki), siradaki, suAn);
+    if (aksiyon === null) break;
+
+    const sonuc = reduce(durum, aksiyon);
+    if (!sonuc.ok) {
+      reddedilen += 1;
+      const tas = atilacakTas(viewFor(durum, siradaki));
+      if (tas === null) break;
+      const atis = reduce(durum, { tip: 'AT', oyuncu: siradaki, tasId: tas.id, suAn });
+      if (!atis.ok) break;
+      durum = atis.state;
+    } else {
+      durum = sonuc.state;
+    }
+    hamle += 1;
+  }
+
+  return {
+    durum,
+    hamle,
+    acanlar: OYUNCULAR.filter((oyuncu) => durum.acmisMi[oyuncu]),
+    reddedilen,
+    talep,
+    reddedilenTalep,
+  };
+}
+
+describe('bot simulasyonu — calma acikken', () => {
+  const turlar: readonly TurNo[] = [1, 2, 9, 15];
+  const eller = turlar.flatMap((tur) =>
+    Array.from({ length: 8 }, (_deger, i) => ({ tur, sonuc: eliCalarakOyna(tur, 4000 + i * 6151) })),
+  );
+
+  it('el kilitlenmeden bitiyor', () => {
+    for (const { tur, sonuc } of eller) {
+      expect(sonuc.durum.faz, `tur ${tur}`).toBe('el-bitti');
+    }
+  });
+
+  it('botun urettigi hicbir talep motorca reddedilmiyor', () => {
+    // Reddedilen bir talep durumu degistirmez ve surucuyu bosuna dondururdu;
+    // `botTalebi` motorun butun on kosullarini kendisi eliyor.
+    for (const { tur, sonuc } of eller) {
+      expect(sonuc.reddedilenTalep, `tur ${tur}`).toBe(0);
+    }
+  });
+
+  it('botlar gercekten caliyor', () => {
+    const toplamTalep = eller.reduce((toplam, { sonuc }) => toplam + sonuc.talep, 0);
+    expect(toplamTalep).toBeGreaterThan(0);
+  });
+
+  it('tas sayisi korunuyor — calma tas uretmez, yalnizca yer degistirir', () => {
+    for (const { tur, sonuc } of eller) {
+      const idler = tumTaslar(sonuc.durum);
+      expect(idler.length, `tur ${tur}`).toBe(106);
+      expect(new Set(idler).size, `tur ${tur}`).toBe(106);
+    }
+  });
+
+  it('calan oyuncunun calis sayaci artiyor (§8 — 5 puan)', () => {
+    const calisOlanEl = eller.find(({ sonuc }) =>
+      OYUNCULAR.some((o) => sonuc.durum.calinanSayisi[o] > 0),
+    );
+    expect(calisOlanEl).toBeDefined();
   });
 });

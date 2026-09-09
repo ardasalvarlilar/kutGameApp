@@ -7,6 +7,7 @@ import {
   turSarti,
   type OyuncuId,
   type TasId,
+  type TurNo,
 } from '@kut/engine';
 import { Dugme, DizmeDugmesi } from './bilesenler/Dugme';
 import { IZGARA_BOYU, Istaka, SLOT_EN } from './bilesenler/Istaka';
@@ -18,6 +19,9 @@ import { SiraSayaci } from './bilesenler/SiraSayaci';
 import { Ayarlar, type MasadakiOyuncu } from './bilesenler/Ayarlar';
 import type { SikayetSebebi } from './ag/api';
 import { UcanTas, type Nokta, type Ucus } from './bilesenler/UcanTas';
+import { hareketUcuslari } from './ucuslar';
+import { useCeviri, type MetinAnahtari } from './dil';
+import { hataMetni } from './hataMetinleri';
 import { gruplariKimlige, kutDiz, seriDiz } from '@kut/politika';
 import { bitirenTaslar, eldenBitmeCozumu } from './eldenBitme';
 import {
@@ -60,6 +64,20 @@ import { renkler } from './tema';
 // degil. Cevrimici masada 2 numarali koltuga oturmus olabilirim; o yuzden
 // yerlesim sabit degil, kendi koltugumdan TURETILIYOR.
 const EN_AZ_SUTUN = 8;
+
+/**
+ * Tur -> acilis sartinin sozluk anahtari.
+ *
+ * Sart metni motorda da var (`turlar.ts`) ama orasi TURKCE ve oyle kalmali:
+ * motor cevirilemez, KURALLAR.md'nin diliyle yazilmis bir spesifikasyon.
+ * Ekran metnini tur numarasindan turetmek ikisini ayirmanin en ucuz yolu.
+ */
+const TUR_SART_ANAHTARLARI: Record<TurNo, MetinAnahtari> = {
+  1: 'tur.sart1', 2: 'tur.sart2', 3: 'tur.sart3', 4: 'tur.sart4',
+  5: 'tur.sart5', 6: 'tur.sart6', 7: 'tur.sart7', 8: 'tur.sart8',
+  9: 'tur.sart9', 10: 'tur.sart10', 11: 'tur.sart11', 12: 'tur.sart12',
+  13: 'tur.sart13', 14: 'tur.sart14', 15: 'tur.sart15', 16: 'tur.sart16',
+};
 
 /** Ekrandaki dort yer — koltuk numaralari `gorunum.ben`den hesaplanir. */
 interface Yerlesim {
@@ -120,6 +138,7 @@ export function Masa({
     cevrimici,
   } = surucu;
 
+  const t = useCeviri();
   const INSAN = gorunum.ben;
   const yerlesim = useMemo(() => yerlesimKur(INSAN), [INSAN]);
 
@@ -127,7 +146,7 @@ export function Masa({
   const [duzen, setDuzen] = useState<Duzen>([]);
   const [secili, setSecili] = useState<readonly TasId[]>([]);
   const [masaOlcu, setMasaOlcu] = useState({ en: 0, boy: 0 });
-  const [ucus, setUcus] = useState<Ucus | null>(null);
+  const [ucusKuyrugu, setUcusKuyrugu] = useState<readonly Ucus[]>([]);
   const [ayarlarAcik, setAyarlarAcik] = useState(false);
   const [sesAcik, setSesAcik] = useState(true);
 
@@ -139,11 +158,16 @@ export function Masa({
 
   const cal = useSes(sesAcik);
   const sesSecici = useSesSecici();
-  const oncekiRef = useRef<{
-    readonly atikAdet: Record<OyuncuId, number>;
-    readonly desteSayisi: number;
-    readonly siradaki: OyuncuId;
-  } | null>(null);
+  /**
+   * En son ANIMASYONU OYNATILAN hareketin sira numarasi.
+   *
+   * `null` "henuz hicbir gorunum gormedim" demek; ilk gorunum yalnizca
+   * kaydediliyor. Yeniden baglanmada sunucu mevcut durumu dogrudan
+   * gonderiyor ve bu olmadan coktan olmus hareketler yeniden oynardi.
+   */
+  const sonHareketNoRef = useRef<number | null>(null);
+  /** Ucus noktalari masaya gore; per olcumunde masanin ekran konumu gerekiyor. */
+  const masaRef = useRef<ComponentRef<typeof View> | null>(null);
 
   const istakam = gorunum.istakam;
 
@@ -187,56 +211,122 @@ export function Masa({
     () => ({ x: masaOlcu.en / 2, y: masaOlcu.boy / 2 }),
     [masaOlcu],
   );
-  const ucusuBitir = useCallback(() => setUcus(null), []);
+  // Kuyruktaki ilk ucus oynuyor; bitince sirayi bir sonrakine biraktiriyor.
+  // Tek bir `ucus` state'i yetmiyordu: bir `CEK_DESTEDEN` UC hareket
+  // uretebiliyor (ceken + calan + ceza) ve ucu de gorunmeli.
+  const ucus = ucusKuyrugu[0] ?? null;
+  const ucusuBitir = useCallback(() => setUcusKuyrugu((kuyruk) => kuyruk.slice(1)), []);
 
-  // Durum degisiminden hangi tasin nereye gittigini cikarip animasyonu tetikler.
+  /**
+   * Perin masa icindeki merkezi — olculemezse null.
+   *
+   * Iki olcum birden gerekiyor: `measureInWindow` EKRAN koordinati veriyor,
+   * ucus noktalari ise masaya gore. Masanin kendi konumunu cikarinca ikisi
+   * ayni duzleme geliyor.
+   */
+  const perNoktalariniOlc = useCallback(
+    async (perIdler: readonly number[]): Promise<Map<number, Nokta>> => {
+      const sonuc = new Map<number, Nokta>();
+      const masa = masaRef.current;
+      if (masa === null || perIdler.length === 0) return sonuc;
+
+      const masaKonumu = await new Promise<Nokta>((coz) =>
+        masa.measureInWindow((x, y) => coz({ x, y })),
+      );
+
+      await Promise.all(
+        perIdler.map(
+          (perId) =>
+            new Promise<void>((coz) => {
+              const perGorunum = hedefRefleri.current.get(
+                hedefAnahtari({ tip: 'per', perId }),
+              );
+              if (perGorunum === undefined || perGorunum === null) return coz();
+              perGorunum.measureInWindow((x, y, en, boy) => {
+                // Henuz yerlesmemis gorunum 0×0 doner; onu hedef sayma.
+                if (en > 0 && boy > 0) {
+                  sonuc.set(perId, {
+                    x: x - masaKonumu.x + en / 2,
+                    y: y - masaKonumu.y + boy / 2,
+                  });
+                }
+                coz();
+              });
+            }),
+        ),
+      );
+      return sonuc;
+    },
+    [],
+  );
+
+  /**
+   * Per olculemediginde kullanilan yedek nokta.
+   *
+   * Perler oyuncunun seridiyle merkez arasinda duruyor (`PerAlani`), o yuzden
+   * SAHIBININ koltugu ile merkezin ortasi makul bir tahmin. Animasyonu
+   * dusurmek yerine yaklasik oynatmak daha iyi: yon yine dogru okunuyor.
+   */
+  const perYedekNoktasi = useCallback(
+    (perId: number): Nokta => {
+      const sahibi = gorunum.yer.find((per) => per.id === perId)?.sahibi ?? gorunum.ben;
+      const koltuk = koltukNoktasi(sahibi);
+      return { x: (koltuk.x + merkezNokta.x) / 2, y: (koltuk.y + merkezNokta.y) / 2 };
+    },
+    [gorunum.yer, gorunum.ben, koltukNoktasi, merkezNokta],
+  );
+
+  // --- Tas hareketleri ------------------------------------------------------
+  // TEK effect, cunku SIRA onemli: once cekis, sonra isleme, en son atis.
+  // Once atis ayri bir effect'te sayac farkindan cikariliyordu ve iki
+  // effect'in tanim sirasi yuzunden atis cekisten ONCE oynuyordu. Artik sirayi
+  // motor veriyor (`sonHareketler`), ekran yalnizca noktalari kuruyor.
   useEffect(() => {
-    const simdi = {
-      atikAdet: {
-        0: gorunum.atikYiginlari[0].adet,
-        1: gorunum.atikYiginlari[1].adet,
-        2: gorunum.atikYiginlari[2].adet,
-        3: gorunum.atikYiginlari[3].adet,
-      } as Record<OyuncuId, number>,
-      desteSayisi: gorunum.desteSayisi,
-      siradaki: gorunum.siradaki,
-    };
-    const onceki = oncekiRef.current;
-    oncekiRef.current = simdi;
-    if (onceki === null || masaOlcu.en === 0) return;
+    const gorulen = sonHareketNoRef.current;
+    sonHareketNoRef.current = gorunum.sonHareketNo;
 
-    for (const oyuncu of OYUNCULAR) {
-      if (simdi.atikAdet[oyuncu] > onceki.atikAdet[oyuncu]) {
-        setUcus({
-          anahtar: `at-${oyuncu}-${simdi.atikAdet[oyuncu]}`,
-          tas: gorunum.atikYiginlari[oyuncu].ustTas,
-          baslangic: koltukNoktasi(oyuncu),
-          bitis: merkezNokta,
-        });
-        return;
-      }
-      if (simdi.atikAdet[oyuncu] < onceki.atikAdet[oyuncu]) {
-        // Tasi CALAN olabilir: sirasi gelen oyuncu degil (§5). `sonCalan`
-        // olmadan calinan tas hep sirasi gelene ucuyordu.
-        setUcus({
-          anahtar: `al-${oyuncu}-${simdi.atikAdet[oyuncu]}`,
-          tas: null,
-          baslangic: merkezNokta,
-          bitis: koltukNoktasi(gorunum.sonCalan ?? onceki.siradaki),
-        });
-        return;
-      }
-    }
+    // Ilk gorunumde yalnizca kaydediyoruz: masaya el ortasinda katilan oyuncu
+    // (ya da yeniden baglanan) coktan olmus bir hareketi izlememeli.
+    if (gorulen === null || masaOlcu.en === 0) return;
 
-    if (simdi.desteSayisi < onceki.desteSayisi) {
-      setUcus({
-        anahtar: `cek-${simdi.desteSayisi}`,
-        tas: null,
-        baslangic: merkezNokta,
-        bitis: koltukNoktasi(onceki.siradaki),
+    const yeniler = gorunum.sonHareketler.filter((hareket) => hareket.sira > gorulen);
+    if (yeniler.length === 0) return;
+
+    const kur = (perNoktalari: Map<number, Nokta>): void => {
+      const ucuslar = hareketUcuslari(yeniler, {
+        merkez: merkezNokta,
+        koltuk: koltukNoktasi,
+        per: (perId) => perNoktalari.get(perId) ?? perYedekNoktasi(perId),
       });
+      if (ucuslar.length > 0) setUcusKuyrugu((kuyruk) => [...kuyruk, ...ucuslar]);
+    };
+
+    // Pere giden hareket yoksa olcume hic girme: cekis ve atis icin per
+    // konumu gereksiz.
+    const perIdler = yeniler
+      .filter((hareket) => hareket.tip === 'isleme' || hareket.tip === 'indirme')
+      .map((hareket) => hareket.perId);
+    if (perIdler.length === 0) {
+      kur(new Map());
+      return;
     }
-  }, [gorunum, masaOlcu, koltukNoktasi, merkezNokta]);
+
+    let iptal = false;
+    void perNoktalariniOlc(perIdler).then((perNoktalari) => {
+      if (!iptal) kur(perNoktalari);
+    });
+    return () => {
+      iptal = true;
+    };
+  }, [
+    gorunum.sonHareketNo,
+    gorunum.sonHareketler,
+    masaOlcu,
+    koltukNoktasi,
+    merkezNokta,
+    perNoktalariniOlc,
+    perYedekNoktasi,
+  ]);
 
   // Yere inen taslarin olcusu masanin eninden turetiliyor: 13'luk bir seri
   // (KURALLAR.md §2'nin en uzun peri) yan sutunlara kirpilmadan sigmali,
@@ -521,12 +611,10 @@ export function Masa({
   // Geri sayimin kendisi SiraSayaci'nda; buradan giden yalnizca bitis ani.
   const sayacBitisi = elBitti ? null : siraBitisi;
   const fazMetni = elBitti
-    ? 'El bitti'
+    ? t('masa.elBitti')
     : gorunum.siradaki === INSAN
-      ? gorunum.faz === 'cekme'
-        ? 'Sıra sende — çek'
-        : 'Sıra sende — aç, işle, at'
-      : `${ADLAR[gorunum.siradaki]} oynuyor`;
+      ? t(gorunum.faz === 'cekme' ? 'masa.siraSendeCek' : 'masa.siraSendeOyna')
+      : t('masa.oynuyor', { ad: ADLAR[gorunum.siradaki] });
 
   return (
     <SafeAreaView style={stil.ekran}>
@@ -534,6 +622,7 @@ export function Masa({
       <View style={stil.govde}>
         <View style={stil.ustAlan}>
           <View
+            ref={masaRef}
             style={stil.masa}
             onLayout={(olay) =>
               setMasaOlcu({
@@ -583,11 +672,8 @@ export function Masa({
                 ve geri geldiginde ayni koltuga oturuyorsun (MIMARI.md §3). */}
             {!bagli ? (
               <View style={stil.kopukPerde}>
-                <Text style={stil.kopukBaslik}>BAĞLANTI YOK</Text>
-                <Text style={stil.kopukMetin}>
-                  Yeniden bağlanılıyor — koltuğun duruyor, sıran gelirse
-                  sunucu senin yerine oynuyor.
-                </Text>
+                <Text style={stil.kopukBaslik}>{t('masa.baglantiYok')}</Text>
+                <Text style={stil.kopukMetin}>{t('masa.baglantiMetin')}</Text>
               </View>
             ) : null}
 
@@ -597,13 +683,17 @@ export function Masa({
                 sirasi gelen oyuncu "kim istiyor"a bakip karar veriyor. */}
             {gorunum.pencere !== null && !elBitti ? (
               <View style={stil.pencere}>
-                <Text style={stil.pencereBaslik}>{ADLAR[gorunum.pencere.atan]} attı</Text>
+                <Text style={stil.pencereBaslik}>
+                  {t('masa.atti', { ad: ADLAR[gorunum.pencere.atan] })}
+                </Text>
                 <Text style={stil.pencereMetin}>
                   {gorunum.pencere.talepler.length > 0
-                    ? `${gorunum.pencere.talepler.map((o) => ADLAR[o]).join(', ')} istiyor`
+                    ? t('masa.istiyor', {
+                        adlar: gorunum.pencere.talepler.map((o) => ADLAR[o]).join(', '),
+                      })
                     : gorunum.siradaki === INSAN
-                      ? 'talep yok — taş senin'
-                      : `${ADLAR[gorunum.siradaki]} karar veriyor`}
+                      ? t('masa.talepYok')
+                      : t('masa.kararVeriyor', { ad: ADLAR[gorunum.siradaki] })}
                 </Text>
               </View>
             ) : null}
@@ -613,7 +703,9 @@ export function Masa({
                 olduğunu anlamiyor — atik obegi sessizce bosaliyor. */}
             {gorunum.sonCalan !== null && !elBitti ? (
               <View style={stil.calmaUyarisi}>
-                <Text style={stil.calmaYazi}>{ADLAR[gorunum.sonCalan]} taşı çaldı</Text>
+                <Text style={stil.calmaYazi}>
+                  {t('masa.tasiCaldi', { ad: ADLAR[gorunum.sonCalan] })}
+                </Text>
               </View>
             ) : null}
 
@@ -638,22 +730,31 @@ export function Masa({
               {/* Geri sayim TUR satirinin sagina bindi: yan panelde alti
                   dugme satiri ancak boyle sigiyor. */}
               <View style={stil.durumUst}>
-                <Text style={stil.turMetni}>TUR {gorunum.tur}/16</Text>
+                <Text style={stil.turMetni}>{t('masa.turNo', { tur: gorunum.tur })}</Text>
                 <SiraSayaci bitis={sayacBitisi} sure={siraSuresi} />
               </View>
-              <Text style={stil.sartMetni}>{sart.aciklama}</Text>
+              {/* Sart metni motorda TURKCE duruyor (turlar.ts); motor saf
+                  kaldigi icin ceviri burada, tur numarasindan. */}
+              <Text style={stil.sartMetni}>{t(TUR_SART_ANAHTARLARI[gorunum.tur])}</Text>
               <Text style={stil.fazMetni}>
                 {fazMetni}
                 {/* §9 0.4 — suresini dolduran oyuncunun hakki kisalir. */}
-                {sureKisaldi ? ` · süren ${Math.round(siraSuresi / 1000)} sn` : ''}
+                {sureKisaldi ? t('masa.surenKisaldi', { sn: Math.round(siraSuresi / 1000) }) : ''}
               </Text>
               {gorunum.calinanSayisi[INSAN] > 0 || gorunum.islerTasSayisi[INSAN] > 0 ? (
                 <Text style={stil.cezaMetni}>
                   {gorunum.calinanSayisi[INSAN] > 0
-                    ? `${gorunum.calinanSayisi[INSAN]}×çaldın (+${gorunum.calinanSayisi[INSAN] * 5}) `
+                    ? t('masa.caldin', {
+                        sayi: gorunum.calinanSayisi[INSAN],
+                        puan: gorunum.calinanSayisi[INSAN] * 5,
+                      })
                     : ''}
                   {gorunum.islerTasSayisi[INSAN] > 0
-                    ? `${gorunum.islerTasSayisi[INSAN]}×işler (+${gorunum.islerTasSayisi[INSAN] * gorunum.ayarlar.islerTasCezasi})`
+                    ? t('masa.islerAttin', {
+                        sayi: gorunum.islerTasSayisi[INSAN],
+                        puan:
+                          gorunum.islerTasSayisi[INSAN] * gorunum.ayarlar.islerTasCezasi,
+                      })
                     : ''}
                 </Text>
               ) : null}
@@ -664,50 +765,52 @@ export function Masa({
                   da obegi asagi surukleyerek, atma ise tasi istakadan yukari
                   surukleyerek yapiliyor. Kalan uzun etiketliler tam satiri
                   kapliyor ki yazi kirpilmasin. */}
-              <Dugme etiket={`AÇ (${acilisGruplari.length})`} aktif={izin.atabilir && acilisGruplari.length > 0} onBas={ac} tur="vurgu" />
-              <Dugme etiket="İNDİR" aktif={izin.atabilir && acilisGruplari.length > 0} onBas={indir} />
+              <Dugme etiket={t('masa.ac', { sayi: acilisGruplari.length })} aktif={izin.atabilir && acilisGruplari.length > 0} onBas={ac} tur="vurgu" />
+              <Dugme etiket={t('masa.indir')} aktif={izin.atabilir && acilisGruplari.length > 0} onBas={indir} />
               <Dugme
-                etiket="TAŞLARI İŞLE"
+                etiket={t('masa.taslariIsle')}
                 aktif={izin.atabilir && gorunum.islemeYapabilirim && islenebilirVar}
                 onBas={taslariIsle}
                 tur="vurgu"
                 genis
               />
               <Dugme
-                etiket={`OKEY AL (${gorunum.okeyFirsatlarim.length})`}
+                etiket={t('masa.okeyAl', { sayi: gorunum.okeyFirsatlarim.length })}
                 aktif={okeyAlinabilir}
                 onBas={okeyAl}
                 tur="vurgu"
                 genis
               />
-              <Dugme etiket="GRUBU SEÇ" aktif={secili.length > 0} onBas={grubuSec} />
-              <Dugme etiket="AYIR" aktif={secili.length > 0} onBas={() => setDuzen(ayir(duzen, secili, sutunSayisi))} />
-              <Dugme etiket="TOPLA" aktif={gruplar.length > 1} onBas={() => setDuzen(topla(duzen, sutunSayisi))} />
-              <Dugme etiket="AYARLAR" aktif onBas={() => setAyarlarAcik(true)} />
-              <Dugme etiket="İSTİYORUM" aktif={izin.talepEdebilir} onBas={() => gonder({ tip: 'CALMA_TALEBI', oyuncu: INSAN, suAn: Date.now() })} tur="vurgu" />
-              <Dugme etiket="ÇİFTİM VAR" aktif={izin.ciftTalepEdebilir} onBas={() => gonder({ tip: 'CIFT_TALEBI', oyuncu: INSAN, suAn: Date.now() })} tur="vurgu" />
+              <Dugme etiket={t('masa.grubuSec')} aktif={secili.length > 0} onBas={grubuSec} />
+              <Dugme etiket={t('masa.ayir')} aktif={secili.length > 0} onBas={() => setDuzen(ayir(duzen, secili, sutunSayisi))} />
+              <Dugme etiket={t('masa.topla')} aktif={gruplar.length > 1} onBas={() => setDuzen(topla(duzen, sutunSayisi))} />
+              <Dugme etiket={t('masa.ayarlar')} aktif onBas={() => setAyarlarAcik(true)} />
+              <Dugme etiket={t('masa.istiyorum')} aktif={izin.talepEdebilir} onBas={() => gonder({ tip: 'CALMA_TALEBI', oyuncu: INSAN, suAn: Date.now() })} tur="vurgu" />
+              <Dugme etiket={t('masa.ciftimVar')} aktif={izin.ciftTalepEdebilir} onBas={() => gonder({ tip: 'CIFT_TALEBI', oyuncu: INSAN, suAn: Date.now() })} tur="vurgu" />
             </ScrollView>
 
             <Text style={stil.hata} numberOfLines={2}>
               {sonHata !== null
-                ? sonHata
+                ? hataMetni(sonHata, t)
                 : okeyAlinabilir
-                  ? gorunum.acmisMi[INSAN]
-                    ? 'Yerden okey çekebilirsin — OKEY AL'
-                    : 'Okeyi alıp açabilirsin — OKEY AL'
+                  ? t(
+                      gorunum.acmisMi[INSAN]
+                        ? 'masa.okeyCekebilirsin'
+                        : 'masa.okeyleAcabilirsin',
+                    )
                   : secili.length > 0 && izin.atabilir
-                    ? 'Bir pere dokunarak işleyebilirsin'
+                    ? t('masa.pereDokun')
                     : izin.atabilir && islenebilirVar && gorunum.islemeYapabilirim
-                      ? 'İşleyecek taşın var — TAŞLARI İŞLE'
+                      ? t('masa.isleyecekTasVar')
                       : izin.atabilir
-                        ? 'Yığına sürükle → at · pere sürükle → işle'
+                        ? t('masa.surukleIpucu')
                         : ''}
             </Text>
           </View>
         </View>
 
         <View style={[stil.altAlan, { height: IZGARA_BOYU + 22 }]}>
-          <DizmeDugmesi ustSatir="KÜT" altSatir="DİZ" aktif={istakam.length > 0} onBas={() => dizle('kut')} />
+          <DizmeDugmesi ustSatir={t('masa.kutDiz')} altSatir={t('masa.diz')} aktif={istakam.length > 0} onBas={() => dizle('kut')} />
           <Istaka
             taslar={istakam}
             duzen={duzen}
@@ -722,7 +825,7 @@ export function Masa({
             onSuruklemeBasladi={hedefleriOlc}
             onOlcum={olcumAl}
           />
-          <DizmeDugmesi ustSatir="SERİ" altSatir="DİZ" aktif={istakam.length > 0} onBas={() => dizle('seri')} />
+          <DizmeDugmesi ustSatir={t('masa.seriDiz')} altSatir={t('masa.diz')} aktif={istakam.length > 0} onBas={() => dizle('seri')} />
         </View>
       </View>
 

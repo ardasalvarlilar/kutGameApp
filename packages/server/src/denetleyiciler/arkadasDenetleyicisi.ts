@@ -50,7 +50,7 @@ export async function arkadaslar(istek: Request, yanit: Response): Promise<void>
 export async function ara(istek: Request, yanit: Response): Promise<void> {
   const cozum = kodGirdisi.safeParse({ kod: istek.query['kod'] });
   if (!cozum.success) {
-    yanit.status(400).json({ ok: false, hata: 'Arkadaş kodu geçersiz' });
+    yanit.status(400).json({ ok: false, hata: 'arkadas-kodu-gecersiz' });
     return;
   }
   await calistir(yanit, async () => ({
@@ -61,7 +61,7 @@ export async function ara(istek: Request, yanit: Response): Promise<void> {
 export async function istek(istek: Request, yanit: Response): Promise<void> {
   const cozum = hedefGirdisi.safeParse(istek.body);
   if (!cozum.success) {
-    yanit.status(400).json({ ok: false, hata: 'Geçersiz oyuncu' });
+    yanit.status(400).json({ ok: false, hata: 'gecersiz-oyuncu' });
     return;
   }
   const benim = istek.oyuncuId as string;
@@ -74,7 +74,7 @@ export async function istek(istek: Request, yanit: Response): Promise<void> {
 export async function kabul(istek: Request, yanit: Response): Promise<void> {
   const cozum = hedefGirdisi.safeParse(istek.body);
   if (!cozum.success) {
-    yanit.status(400).json({ ok: false, hata: 'Geçersiz oyuncu' });
+    yanit.status(400).json({ ok: false, hata: 'gecersiz-oyuncu' });
     return;
   }
   const benim = istek.oyuncuId as string;
@@ -88,7 +88,7 @@ export async function kabul(istek: Request, yanit: Response): Promise<void> {
 export async function sil(istek: Request, yanit: Response): Promise<void> {
   const cozum = hedefGirdisi.safeParse(istek.body);
   if (!cozum.success) {
-    yanit.status(400).json({ ok: false, hata: 'Geçersiz oyuncu' });
+    yanit.status(400).json({ ok: false, hata: 'gecersiz-oyuncu' });
     return;
   }
   const benim = istek.oyuncuId as string;

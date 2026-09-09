@@ -216,7 +216,7 @@ describe.skipIf(!mongoVar)('istek akisi', () => {
       a.jeton,
     );
     expect(kod).toBe(400);
-    expect(cevap.hata).toContain('Kendine');
+    expect(cevap.hata).toBe('kendine-istek');
   });
 
   it('kendi gonderdigi istegi kendisi kabul edemiyor', async () => {
@@ -343,7 +343,7 @@ describe.skipIf(!mongoVar)('parola degistirme', () => {
       hesap.jeton,
     );
     expect(kod).toBe(400);
-    expect(cevap.hata).toContain('Mevcut parolan');
+    expect(cevap.hata).toBe('mevcut-parola-hatali');
   });
 
   it('misafir hesabinda parola degistirilemiyor', async () => {

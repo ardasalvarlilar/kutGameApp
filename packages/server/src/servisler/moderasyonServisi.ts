@@ -26,7 +26,7 @@ const SIKAYET_ARALIGI_MS = 24 * 60 * 60 * 1000;
 const EN_FAZLA_ENGEL = 500;
 
 function kimlik(deger: string): Types.ObjectId {
-  if (!Types.ObjectId.isValid(deger)) throw new ModerasyonHatasi('Geçersiz oyuncu');
+  if (!Types.ObjectId.isValid(deger)) throw new ModerasyonHatasi('gecersiz-oyuncu');
   return new Types.ObjectId(deger);
 }
 
@@ -40,13 +40,13 @@ export interface SikayetGirdisi {
 
 export async function sikayetEt(girdi: SikayetGirdisi): Promise<void> {
   if (girdi.sikayetEdenId === girdi.sikayetEdilenId) {
-    throw new ModerasyonHatasi('Kendini bildiremezsin');
+    throw new ModerasyonHatasi('kendini-bildirme');
   }
   const eden = kimlik(girdi.sikayetEdenId);
   const edilen = kimlik(girdi.sikayetEdilenId);
 
   const hedef = await Oyuncu.findById(edilen).select('ad').lean();
-  if (hedef === null) throw new ModerasyonHatasi('Oyuncu bulunamadı');
+  if (hedef === null) throw new ModerasyonHatasi('oyuncu-bulunamadi');
 
   const yakinda = await Sikayet.findOne({
     sikayetEden: eden,
@@ -72,16 +72,16 @@ export async function sikayetEt(girdi: SikayetGirdisi): Promise<void> {
 }
 
 export async function engelle(oyuncuId: string, hedefId: string): Promise<void> {
-  if (oyuncuId === hedefId) throw new ModerasyonHatasi('Kendini engelleyemezsin');
+  if (oyuncuId === hedefId) throw new ModerasyonHatasi('kendini-engelleme');
   const hedef = kimlik(hedefId);
 
   if ((await Oyuncu.countDocuments({ _id: hedef })) === 0) {
-    throw new ModerasyonHatasi('Oyuncu bulunamadı');
+    throw new ModerasyonHatasi('oyuncu-bulunamadi');
   }
   const oyuncu = await Oyuncu.findById(oyuncuId).select('engellenenler');
-  if (oyuncu === null) throw new ModerasyonHatasi('Oyuncu bulunamadı');
+  if (oyuncu === null) throw new ModerasyonHatasi('oyuncu-bulunamadi');
   if (oyuncu.engellenenler.length >= EN_FAZLA_ENGEL) {
-    throw new ModerasyonHatasi('Engel listen dolu');
+    throw new ModerasyonHatasi('engel-listen-dolu');
   }
   // `$addToSet`: iki kez engellemek listede iki kayit birakmasin.
   await Oyuncu.updateOne({ _id: oyuncuId }, { $addToSet: { engellenenler: hedef } });

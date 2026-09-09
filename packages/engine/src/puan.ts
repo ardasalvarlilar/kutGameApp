@@ -14,6 +14,16 @@ import {
 /** KURALLAR.md §8 — eli bitiren oyuncunun puani. */
 export const KAZANAN_PUANI = -100;
 
+/**
+ * KURALLAR.md §8 — son tasi OKEY atarak bitiren oyuncunun puani (§9 0.11).
+ *
+ * Okeyle bitmek rakiplere ×2 yaziyordu ama bitirene bir sey getirmiyordu:
+ * elindeki 25 puanlik tasi tutup normal bitmekle ayni -100'u aliyordu.
+ * Odul yalnizca "rakiplerin daha cok yazmasi" olunca, kazanan icin okeyi
+ * atmak ile saklamak arasindaki fark kayboluyordu.
+ */
+export const KAZANAN_OKEYLE_PUANI = -200;
+
 /** KURALLAR.md §5 — her calis 5 ceza puani. */
 export const CALMA_CEZASI = 5;
 
@@ -52,11 +62,18 @@ export interface PuanGirdisi {
   readonly islerTasSayisi: OyuncuKaydi<number>;
 }
 
-function bosDetay(toplam: number, calmaCezasi: number, islerTasCezasi: number): PuanDetayi {
+function bosDetay(
+  toplam: number,
+  calmaCezasi: number,
+  islerTasCezasi: number,
+  okeyleBitmeCarpani = false,
+): PuanDetayi {
   return {
     hamCeza: 0,
     acamadiCarpani: false,
-    okeyleBitmeCarpani: false,
+    // Kazananda bu bayrak "carpan yedi" degil, "-200 aldi" demek: el sonu
+    // tablosu -100 ile -200'u ayirt edebilsin diye tasiniyor.
+    okeyleBitmeCarpani,
     carpan: 1,
     calmaCezasi,
     islerTasCezasi,
@@ -70,6 +87,9 @@ function bosDetay(toplam: number, calmaCezasi: number, islerTasCezasi: number): 
  *   if (hic acmadiysa)           ceza *= 2
  *   if (kazanan okeyle bittiyse) ceza *= 2    // ikisi birden → *4
  *   ceza += 5 * (calinan tas sayisi)          // carpana GIRMEZ, en sonda
+ *
+ * Kazanan: -100, okeyle bittiyse -200 (§9 0.11); calma ve isler tas bedeli
+ * ona da eklenir.
  */
 export function elPuanla(
   girdi: PuanGirdisi,
@@ -84,6 +104,12 @@ export function elPuanla(
     bitisTipi === 'deste-tukendi' && !ayarlar.desteTukendigindeKazananVar ? null : kazanan;
   const gecerliOkeyleBitti = gecerliKazanan === null ? false : okeyleBitti;
 
+  // §9.7: tur 16'da okeyle bitme carpani da gecerli. Oyuncudan bagimsiz oldugu
+  // icin donguden once hesaplaniyor — kazananin -200'u de ayni sarta bagli,
+  // yoksa carpanin islemedigi bir turda kazanan yine odul alirdi.
+  const okeyleBitmeGecerli =
+    gecerliOkeyleBitti && (tur !== 16 || ayarlar.tur16OkeyleBitmeCarpani);
+
   const detaylar = oyuncuKaydiOlustur<PuanDetayi>((oyuncu) => {
     const calinan = girdi.calinanSayisi[oyuncu];
 
@@ -93,7 +119,14 @@ export function elPuanla(
       // §9.5 (karara baglandi): kazanan da caldigi taslarin bedelini oder.
       // Isler tas cezasi de ayni mantikla kazanan icin de gecerli.
       const calmaCezasi = ayarlar.kazananCalmaCezasiOder ? CALMA_CEZASI * calinan : 0;
-      return bosDetay(KAZANAN_PUANI + calmaCezasi + islerCezasi, calmaCezasi, islerCezasi);
+      // §8 (§9 0.11): son tasi okey atarak bitiren -200 yazar.
+      const temelPuan = okeyleBitmeGecerli ? KAZANAN_OKEYLE_PUANI : KAZANAN_PUANI;
+      return bosDetay(
+        temelPuan + calmaCezasi + islerCezasi,
+        calmaCezasi,
+        islerCezasi,
+        okeyleBitmeGecerli,
+      );
     }
 
     const hamCeza = tasToplami(girdi.istakalar[oyuncu]);
@@ -104,9 +137,7 @@ export function elPuanla(
     const acamadiCarpani =
       acamadi && (tur !== 16 || bitisTipi === 'deste-tukendi' || ayarlar.tur16AcamadiCarpani);
 
-    // §9.7 (karara baglandi): tur 16'da okeyle bitme carpani da gecerli.
-    const okeyleBitmeCarpani =
-      gecerliOkeyleBitti && (tur !== 16 || ayarlar.tur16OkeyleBitmeCarpani);
+    const okeyleBitmeCarpani = okeyleBitmeGecerli;
 
     const carpan = (acamadiCarpani ? 2 : 1) * (okeyleBitmeCarpani ? 2 : 1);
 

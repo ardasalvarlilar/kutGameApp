@@ -56,6 +56,8 @@ function gorunumKur(p: {
     okeyFirsatlarim: [],
     pencere: null,
     sonCalan: null,
+    sonHareketler: [],
+    sonHareketNo: 0,
     sonuc: null,
   };
 }

@@ -12,7 +12,7 @@ import type { Aksiyon, OyuncuId, TurNo } from '@kut/engine';
 // Sure dolunca ne oynanacagi bir KURAL degil, politika: @kut/politika'da,
 // cevrimdisi masayla AYNI dosyada. Eskiden burada bir kopyasi vardi
 // (`soket/yerineOyna.ts`) ve iki botun ayni oynayacaginin garantisi yoktu.
-import { botAksiyonu, sureDolduAksiyonu } from '@kut/politika';
+import { botAksiyonu, botTalebi, sureDolduAksiyonu } from '@kut/politika';
 import { OyunServisi } from '../servisler/oyunServisi.js';
 import type { MasaGorunumu, SunucuOlaylari } from '../tipler/protokol.js';
 import { kayit } from '../kayit.js';
@@ -45,6 +45,29 @@ const BOT_GECIKMESI_MS = 1_400;
  */
 const BOT_CALMA_PAYI_MS = 3_000;
 
+/**
+ * Botun "istiyorum" demeden once bekledigi sure — masada calabilecek bir
+ * INSAN varken (ms).
+ *
+ * Sifir degil, cunku tur 15'te `CIFT_TALEBI` kuyruga girmeden tasi ANINDA
+ * aliyor (§9 0.10) ve okey de es sayildigi icin (§3) ayni tas icin bir
+ * insanla bot ayni anda hak sahibi olabiliyor. Normal `CALMA_TALEBI`de yaris
+ * yok: oncelik koltuk sirasina gore cozuluyor (§5), kim once bastiysa degil.
+ *
+ * BOT_CALMA_PAYI_MS'ten kisa olmali — pencereyi kapatan o.
+ */
+const BOT_TALEP_GECIKMESI_MS = 2_000;
+
+/**
+ * Calabilecek insan YOKKEN talep gecikmesi (ms).
+ *
+ * Ayri bir deger sart: o durumda sirasi gelen bot BOT_GECIKMESI_MS'te (1.4 sn)
+ * oynayip pencereyi kapatiyor. Tek bir 2 saniyelik gecikme, insanin ATTIGI
+ * taslar icin botlarin talebini fiilen imkansiz kilıyordu — pencere hep once
+ * kapaniyordu. Beklemenin karsiligi da yok: ortada tepki verecek insan yok.
+ */
+const BOT_HIZLI_TALEP_MS = 700;
+
 export interface OturumSecenekleri {
   readonly masaId: string;
   readonly oturanlar: readonly Oturan[];
@@ -68,6 +91,13 @@ export class MasaOturumu {
   #botZamanlayici: NodeJS.Timeout | null = null;
   /** Tur arasi bekleme. Ayri tutuluyor ki `kapat()` ikisini de iptal etsin. */
   #araZamanlayici: NodeJS.Timeout | null = null;
+  /**
+   * Talep penceresi acikken bot koltuklarinin "istiyorum" karari.
+   *
+   * Sira zamanlayicisindan AYRI: calma sira BASKASINDAYKEN yapilan bir
+   * hamle (§5), sira sayacina baglanamaz.
+   */
+  #talepZamanlayici: NodeJS.Timeout | null = null;
   #onElBitti: OturumSecenekleri['onElBitti'];
   /** Koltuk -> son islenen hamle numarasi. Tekrar gonderimi engeller. */
   #sonHamleNo = new Map<OyuncuId, number>();
@@ -108,6 +138,37 @@ export class MasaOturumu {
   baglantiDurumu(oyuncuId: string, bagli: boolean): void {
     const oturan = this.oturanlar.find((o) => o.oyuncuId === oyuncuId);
     if (oturan !== undefined) oturan.bagli = bagli;
+  }
+
+  /**
+   * Masadan ayrilan insanin koltugunu BOTA devreder (bellekteki karsiligi;
+   * belge tarafi `masaServisi.koltuguBotaDevret`).
+   *
+   * Ayrilan oyuncu `insanlar`dan dustugu icin ona artik `oyun:gorunum`
+   * gitmiyor — "masadan cikamiyorum" hatasinin kok nedeni buydu: gorunum
+   * kisisel odaya gidiyor, masa odasindan cikmak onu kesmiyordu.
+   *
+   * Koltugun kimligi `bot:<koltuk>` oluyor; gercek bir ObjectId olmadigi icin
+   * istatistik ve el kaydi bu koltuk icin yazilmaz (zaten yazilmamali:
+   * elin geri kalanini bot oynadi).
+   */
+  botaDevret(oyuncuId: string): OyuncuId | null {
+    const indeks = this.oturanlar.findIndex((o) => o.oyuncuId === oyuncuId && !o.bot);
+    if (indeks === -1) return null;
+
+    const eski = this.oturanlar[indeks] as Oturan;
+    this.oturanlar[indeks] = {
+      koltuk: eski.koltuk,
+      oyuncuId: `bot:${eski.koltuk}`,
+      bot: true,
+      bagli: true,
+    };
+
+    // Sira ondaysa hamlesini kimse planlamamisti: sira gectiginde koltuk
+    // insandi, `#botuPlanla` de bu yuzden erken donmustu. Bekleyen bir bot
+    // zamanlayicisi varsa ona dokunmuyoruz, yoksa sira kilitli kalir.
+    if (this.#botZamanlayici === null) this.#botuPlanla();
+    return eski.koltuk;
   }
 
   get bagliOlanlar(): ReadonlySet<string> {
@@ -163,11 +224,11 @@ export class MasaOturumu {
     hamleNo: number,
   ): { ok: boolean; hata?: string | undefined } {
     const koltuk = this.koltugu(oyuncuId);
-    if (koltuk === null) return { ok: false, hata: 'Bu masada değilsin' };
+    if (koltuk === null) return { ok: false, hata: 'bu-masada-degilsin' };
 
     // Istemci BASKASI adina hamle gonderemez. Bu kontrol olmadan protokol
     // guvenilmez olurdu; aksiyonun icindeki `oyuncu` alani istemciden geliyor.
-    if (aksiyon.oyuncu !== koltuk) return { ok: false, hata: 'Başkasının adına oynayamazsın' };
+    if (aksiyon.oyuncu !== koltuk) return { ok: false, hata: 'baskasinin-adina' };
 
     const oncekiHamle = this.#sonHamleNo.get(koltuk);
     if (oncekiHamle !== undefined && hamleNo <= oncekiHamle) {
@@ -220,6 +281,9 @@ export class MasaOturumu {
 
     this.#zamanlayici = setTimeout(() => this.#sureDoldu(), Math.max(0, bitis - Date.now()));
     this.#botuPlanla();
+    // Pencere tam da burada aciliyor (atistan sonra faz degisiyor); botlarin
+    // calma karari da bu ana bagli.
+    this.#botTalepleriniPlanla();
   }
 
   #zamanlayiciyiDurdur(): void {
@@ -231,6 +295,75 @@ export class MasaOturumu {
       clearTimeout(this.#botZamanlayici);
       this.#botZamanlayici = null;
     }
+    if (this.#talepZamanlayici !== null) {
+      clearTimeout(this.#talepZamanlayici);
+      this.#talepZamanlayici = null;
+    }
+  }
+
+  // --- Bot talepleri (calma) -------------------------------------------------
+
+  /**
+   * Talep penceresi acikken bot koltuklarinin calma karari.
+   *
+   * `botAksiyonu` yalnizca SIRA BOTTAYKEN cagriliyor; calma ise sira
+   * baskasindayken yapilan bir hamle (§5). Bu yuzden ayri bir yol gerekiyordu
+   * — botlar bu hakki hic kullanmiyor, masadaki tek "insan gibi oynamayan"
+   * taraf oluyorlardi.
+   */
+  #botTalepleriniPlanla(): void {
+    if (this.#talepZamanlayici !== null) return;
+    if (this.#oyun.bittiMi || this.#oyun.durum.pencere === null) return;
+    // Masada hic bot yoksa zamanlayici kurmanin anlami yok.
+    if (!this.oturanlar.some((oturan) => oturan.bot)) return;
+
+    this.#talepZamanlayici = setTimeout(() => {
+      this.#talepZamanlayici = null;
+      this.#botTalepleri();
+    }, this.#talepGecikmesi());
+  }
+
+  /**
+   * Talep gecikmesi, pencereyi kimin kapatacagina bagli.
+   *
+   * Calabilecek insan varsa sirasi gelen bot BOT_CALMA_PAYI_MS (3 sn)
+   * bekliyor — talep icin de yer var, insana tepki payi birakilir.
+   * Yoksa bot 1.4 saniyede oynayip pencereyi kapatiyor; talep ondan once
+   * girmeli.
+   */
+  #talepGecikmesi(): number {
+    return this.#calabilecekInsanVar() ? BOT_TALEP_GECIKMESI_MS : BOT_HIZLI_TALEP_MS;
+  }
+
+  /** Pencere acikken "istiyorum" diyebilecek bir insan var mi (§5)? */
+  #calabilecekInsanVar(): boolean {
+    const durum = this.#oyun.durum;
+    const pencere = durum.pencere;
+    if (pencere === null) return false;
+    return this.insanlar.some(
+      (oturan) => oturan.koltuk !== pencere.atan && oturan.koltuk !== durum.siradaki,
+    );
+  }
+
+  #botTalepleri(): void {
+    if (this.#oyun.bittiMi) return;
+
+    let degisti = false;
+    for (const oturan of this.oturanlar) {
+      if (!oturan.bot) continue;
+      // `CIFT_TALEBI` tasi ANINDA alip pencereyi kapatiyor (§9 0.10);
+      // sonraki botlar icin pencere artik yok.
+      if (this.#oyun.durum.pencere === null) break;
+
+      const aksiyon = botTalebi(this.#oyun.gorunum(oturan.koltuk), oturan.koltuk, Date.now());
+      if (aksiyon === null) continue;
+
+      const sonuc = this.#oyun.uygula(aksiyon);
+      if (sonuc.ok) degisti = true;
+      else kayit.uyari(`Bot talebi reddedildi: ${sonuc.reason}`, { masaId: this.masaId });
+    }
+
+    if (degisti) this.gorunumleriYay();
   }
 
   // --- Bot koltuklari --------------------------------------------------------
@@ -261,14 +394,8 @@ export class MasaOturumu {
    * "istiyorum" demeye yetmez.
    */
   #botBeklemesi(): number {
-    const durum = this.#oyun.durum;
-    const pencere = durum.pencere;
-    if (durum.faz !== 'cekme' || pencere === null) return BOT_GECIKMESI_MS;
-
-    const calabilecekInsanVar = this.insanlar.some(
-      (oturan) => oturan.koltuk !== pencere.atan && oturan.koltuk !== durum.siradaki,
-    );
-    return calabilecekInsanVar ? BOT_CALMA_PAYI_MS : BOT_GECIKMESI_MS;
+    if (this.#oyun.durum.faz !== 'cekme') return BOT_GECIKMESI_MS;
+    return this.#calabilecekInsanVar() ? BOT_CALMA_PAYI_MS : BOT_GECIKMESI_MS;
   }
 
   /** Botun sirasi: acilis, isleme ve atis birden fazla hamle olabilir. */

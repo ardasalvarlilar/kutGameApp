@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { VARSAYILAN_AYARLAR, ayarlariBirlestir, type KuralAyarlari } from '../src/kurallar';
 import {
   CALMA_CEZASI,
+  KAZANAN_OKEYLE_PUANI,
   KAZANAN_PUANI,
   elPuanla,
   macKazanani,
@@ -143,6 +144,25 @@ describe('kazanan — KURALLAR.md §8, §9.5 (karara baglandi)', () => {
   it('kazananin elinde tas kalmadigi icin carpan islemez', () => {
     const sonuc = elPuanla(girdi(), 'normal', 2, true);
     expect(sonuc.detaylar[2].carpan).toBe(1);
+  });
+
+  // KURALLAR.md §8, §9 0.11
+  it('son tasi okey atarak bitiren -200 alir', () => {
+    const sonuc = elPuanla(girdi(), 'normal', 2, true);
+    expect(sonuc.puanlar[2]).toBe(KAZANAN_OKEYLE_PUANI);
+    expect(KAZANAN_OKEYLE_PUANI).toBe(-200);
+  });
+
+  it('okeyle bitirenin calma bedeli -200 uzerine eklenir', () => {
+    const sonuc = elPuanla(girdi({ calinanSayisi: { 2: 3 } }), 'normal', 2, true);
+    expect(sonuc.puanlar[2]).toBe(-200 + 3 * CALMA_CEZASI);
+  });
+
+  // Deste tukendiginde kazanan yok (§9.4); okeyle bitme de olamaz.
+  it('deste tukendiginde kimse -200 almaz', () => {
+    const sonuc = elPuanla(girdi(), 'deste-tukendi', 2, true);
+    expect(sonuc.kazanan).toBeNull();
+    expect(sonuc.puanlar[2]).toBe(0);
   });
 });
 

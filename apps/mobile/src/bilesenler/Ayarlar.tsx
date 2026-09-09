@@ -13,8 +13,18 @@
 
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SIKAYET_METINLERI, SIKAYET_SEBEPLERI, type SikayetSebebi } from '../ag/api';
+import { SIKAYET_SEBEPLERI, type SikayetSebebi } from '../ag/api';
+import { useCeviri, type MetinAnahtari } from '../dil';
 import { renkler } from '../tema';
+
+/** Sikayet sebebi -> sozluk anahtari. Tek tuketicisi bu ekran. */
+const SIKAYET_ANAHTARLARI: Record<SikayetSebebi, MetinAnahtari> = {
+  'uygunsuz-ad': 'sikayet.uygunsuz-ad',
+  taciz: 'sikayet.taciz',
+  hile: 'sikayet.hile',
+  'oyunu-bozma': 'sikayet.oyunu-bozma',
+  diger: 'sikayet.diger',
+};
 
 /** Masadaki baska bir oyuncu — bildirmek ve engellemek icin gereken en az bilgi. */
 export interface MasadakiOyuncu {
@@ -50,6 +60,9 @@ export function Ayarlar({
   /** Sebep listesi acilan oyuncu; hicbiri acik degilse null. */
   const [sebepSecilen, setSebepSecilen] = useState<string | null>(null);
   const [bildirilenler, setBildirilenler] = useState<readonly string[]>([]);
+  /** Cikis iki dokunus: koltugu bota devretmenin geri donusu yok. */
+  const [cikisOnayi, setCikisOnayi] = useState(false);
+  const t = useCeviri();
 
   const bildir = (oyuncuId: string, sebep: SikayetSebebi): void => {
     onSikayet?.(oyuncuId, sebep);
@@ -61,7 +74,7 @@ export function Ayarlar({
     <View style={stil.perde}>
       <View style={stil.kutu}>
         <View style={stil.baslikSatiri}>
-          <Text style={stil.baslik}>AYARLAR</Text>
+          <Text style={stil.baslik}>{t('ayarlar.baslik')}</Text>
           <Pressable onPress={onKapat} style={stil.kapat} hitSlop={8}>
             <Text style={stil.kapatMetin}>✕</Text>
           </Pressable>
@@ -69,17 +82,17 @@ export function Ayarlar({
 
         <ScrollView style={stil.kaydirici} showsVerticalScrollIndicator={false}>
           <Pressable onPress={() => onSes(!sesAcik)} style={stil.satir}>
-            <Text style={stil.satirMetin}>Ses</Text>
+            <Text style={stil.satirMetin}>{t('ayarlar.ses')}</Text>
             <View style={[stil.anahtar, sesAcik && stil.anahtarAcik]}>
               <Text style={[stil.anahtarMetin, sesAcik && stil.anahtarMetinAcik]}>
-                {sesAcik ? 'AÇIK' : 'KAPALI'}
+                {t(sesAcik ? 'ayarlar.acik' : 'ayarlar.kapali')}
               </Text>
             </View>
           </Pressable>
 
           {digerOyuncular.length > 0 ? (
             <>
-              <Text style={stil.bolum}>MASADAKİLER</Text>
+              <Text style={stil.bolum}>{t('ayarlar.masadakiler')}</Text>
               {digerOyuncular.map((kisi) => {
                 const engelli = engellenenIdler.includes(kisi.oyuncuId);
                 const bildirildi = bildirilenler.includes(kisi.oyuncuId);
@@ -96,7 +109,7 @@ export function Ayarlar({
                         hitSlop={4}
                       >
                         <Text style={stil.kucukMetin}>
-                          {bildirildi ? 'BİLDİRİLDİ' : 'BİLDİR'}
+                          {t(bildirildi ? 'ayarlar.bildirildi' : 'ayarlar.bildir')}
                         </Text>
                       </Pressable>
                       <Pressable
@@ -105,21 +118,21 @@ export function Ayarlar({
                         hitSlop={4}
                       >
                         <Text style={[stil.kucukMetin, stil.tehlikeMetin]}>
-                          {engelli ? 'ENGELLİ' : 'ENGELLE'}
+                          {t(engelli ? 'ayarlar.engelli' : 'ayarlar.engelle')}
                         </Text>
                       </Pressable>
                     </View>
 
                     {acik ? (
                       <View style={stil.sebepler}>
-                        <Text style={stil.sebepBaslik}>Sebep nedir?</Text>
+                        <Text style={stil.sebepBaslik}>{t('ayarlar.sebepNedir')}</Text>
                         {SIKAYET_SEBEPLERI.map((sebep) => (
                           <Pressable
                             key={sebep}
                             onPress={() => bildir(kisi.oyuncuId, sebep)}
                             style={stil.sebep}
                           >
-                            <Text style={stil.sebepMetin}>{SIKAYET_METINLERI[sebep]}</Text>
+                            <Text style={stil.sebepMetin}>{t(SIKAYET_ANAHTARLARI[sebep])}</Text>
                           </Pressable>
                         ))}
                       </View>
@@ -128,21 +141,39 @@ export function Ayarlar({
                 );
               })}
               <Text style={stil.ipucu}>
-                Engellediğin oyuncuyla bir daha aynı masaya düşmezsin.
+                {t('ayarlar.engelIpucu')}
               </Text>
             </>
           ) : null}
 
-          {/* Cevrimicide ipucu bilerek "el kaybolur" DEGIL: koltuk bosalmiyor
-              (MIMARI.md §3), dort koltuk dolu olmadan motor ilerleyemez ve
-              cikan biri masayi kilitlerdi. Cevrimdisi masada sunucu yok, el
-              gercekten bitiyor — ayni cumleyi orada yazmak yalan olurdu. */}
-          <Pressable onPress={onMasadanCik} style={[stil.satir, stil.cikis]}>
-            <Text style={[stil.satirMetin, stil.cikisMetin]}>Masadan çık</Text>
-            <Text style={stil.cikisIpucu}>
-              {cevrimici ? 'yerine sunucu oynar' : 'el biter'}
-            </Text>
-          </Pressable>
+          {/* Cikis ONAY istiyor ve donusu yok: cevrimicide koltuk BOTA
+              devrediliyor (masaServisi.koltuguBotaDevret). Tek dokunusla
+              olsaydi yanlislikla basan oyuncu elini bota birakmis olurdu.
+              Cevrimdisi masada sunucu yok, el gercekten bitiyor. */}
+          {cikisOnayi ? (
+            <View style={stil.onayKutu}>
+              <Text style={stil.onayMetin}>
+                {cevrimici
+                  ? t('ayarlar.cikisOnayCevrimici')
+                  : t('ayarlar.cikisOnayCevrimdisi')}
+              </Text>
+              <View style={stil.onaySatiri}>
+                <Pressable onPress={() => setCikisOnayi(false)} style={stil.onayDugme}>
+                  <Text style={stil.onayDugmeMetin}>{t('ayarlar.vazgec')}</Text>
+                </Pressable>
+                <Pressable onPress={onMasadanCik} style={[stil.onayDugme, stil.onayTehlike]}>
+                  <Text style={[stil.onayDugmeMetin, stil.cikisMetin]}>{t('ayarlar.ayril')}</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : (
+            <Pressable onPress={() => setCikisOnayi(true)} style={[stil.satir, stil.cikis]}>
+              <Text style={[stil.satirMetin, stil.cikisMetin]}>{t('ayarlar.masadanCik')}</Text>
+              <Text style={stil.cikisIpucu}>
+                {t(cevrimici ? 'ayarlar.cikisIpucuCevrimici' : 'ayarlar.cikisIpucuCevrimdisi')}
+              </Text>
+            </Pressable>
+          )}
         </ScrollView>
       </View>
     </View>
@@ -248,4 +279,27 @@ const stil = StyleSheet.create({
   cikis: { borderColor: renkler.uyari, marginTop: 12 },
   cikisMetin: { color: renkler.uyari },
   cikisIpucu: { color: renkler.metinSolgun, fontSize: 9 },
+
+  onayKutu: {
+    marginTop: 12,
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: renkler.uyari,
+    backgroundColor: renkler.panel,
+    gap: 8,
+  },
+  onayMetin: { color: renkler.metin, fontSize: 11, lineHeight: 15 },
+  onaySatiri: { flexDirection: 'row', gap: 8 },
+  onayDugme: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 6,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: renkler.kenar,
+    backgroundColor: renkler.arkaKoyu,
+  },
+  onayTehlike: { borderColor: renkler.uyari },
+  onayDugmeMetin: { color: renkler.metin, fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
 });

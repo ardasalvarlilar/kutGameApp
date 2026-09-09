@@ -23,6 +23,7 @@ import type { MasadakiOyuncu } from './bilesenler/Ayarlar';
 import { Masa } from './Masa';
 import { useCevrimiciMasa } from './ag/cevrimiciOyun';
 import { useKimlik } from './ag/kimlik';
+import { useCeviri } from './dil';
 import { useOyun } from './oyun';
 import type { SikayetSebebi } from './ag/api';
 import { renkler } from './tema';
@@ -53,6 +54,7 @@ function AlistirmaMasasi({ onCik }: { readonly onCik: () => void }) {
 
 export function Uygulama() {
   const kimlik = useKimlik();
+  const t = useCeviri();
   const oda = useCevrimiciMasa(kimlik.soket, kimlik.bagli);
   const [yanEkran, setYanEkran] = useState<YanEkran>('yok');
 
@@ -103,7 +105,7 @@ export function Uygulama() {
     return (
       <SafeAreaView style={stil.ekran}>
         <StatusBar hidden />
-        <Perde yazi="oturum açılıyor" />
+        <Perde yazi={t('uygulama.oturumAciliyor')} />
       </SafeAreaView>
     );
   }
@@ -138,7 +140,7 @@ export function Uygulama() {
       return (
         <SafeAreaView style={stil.ekran}>
           <StatusBar hidden />
-          <Perde yazi="el dağıtılıyor" />
+          <Perde yazi={t('uygulama.elDagitiliyor')} />
         </SafeAreaView>
       );
     }

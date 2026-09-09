@@ -12,6 +12,7 @@ import { Platform } from 'react-native';
 
 const JETON_ANAHTARI = 'kut.jeton';
 const CIHAZ_ANAHTARI = 'kut.cihaz';
+const DIL_ANAHTARI = 'kut.dil';
 
 const webMi = Platform.OS === 'web';
 
@@ -47,6 +48,16 @@ async function sil(anahtar: string): Promise<void> {
 export const jetonuOku = (): Promise<string | null> => oku(JETON_ANAHTARI);
 export const jetonuYaz = (jeton: string): Promise<void> => yaz(JETON_ANAHTARI, jeton);
 export const jetonuSil = (): Promise<void> => sil(JETON_ANAHTARI);
+
+/**
+ * Dil tercihi — CIHAZDA duruyor, hesapta degil.
+ *
+ * Dil, hesabin degil o telefonun ozelligi: ayni hesaba baska bir cihazdan
+ * girildiginde oranin dilini degistirmek istemiyoruz. Sunucuya da tasimak
+ * gerekmiyor; hata kodlarini istemci ceviriyor (`hataMetinleri.ts`).
+ */
+export const diliOku = (): Promise<string | null> => oku(DIL_ANAHTARI);
+export const diliYaz = (dil: string): Promise<void> => yaz(DIL_ANAHTARI, dil);
 
 /**
  * Cihaz kimligi — misafir hesabinin tek baglantisi.

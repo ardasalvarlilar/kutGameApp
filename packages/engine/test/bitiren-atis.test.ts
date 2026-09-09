@@ -37,10 +37,11 @@ describe('eli bitiren atis §8 cezasi yemez', () => {
     expect(sonuc?.kazanan).toBe(0);
     expect(sonuc?.okeyleBitti).toBe(true);
 
-    // Asil mesele: kazananin puani -100, ustune 50 EKLENMIYOR.
+    // Asil mesele: kazananin puanina 50 EKLENMIYOR.
     // (Duzeltmeden once -100 + 50 = -50 yaziyordu.)
     expect(sonuc?.detaylar[0].islerTasCezasi).toBe(0);
-    expect(sonuc?.puanlar[0]).toBe(-100);
+    // Son tas okey atilarak bitildi → §9 0.11: -100 degil -200.
+    expect(sonuc?.puanlar[0]).toBe(-200);
 
     // Okeyle bitme carpani digerlerinde: acan ×2, acamayan ×4 (§8).
     expect(sonuc?.detaylar[1].carpan).toBe(2);

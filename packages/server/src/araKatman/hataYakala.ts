@@ -7,7 +7,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { kayit } from '../kayit.js';
 
 export function bulunamadi(_istek: Request, yanit: Response): void {
-  yanit.status(404).json({ ok: false, hata: 'Böyle bir uç yok' });
+  yanit.status(404).json({ ok: false, hata: 'uc-bulunamadi' });
 }
 
 export function hataYakala(
@@ -17,5 +17,5 @@ export function hataYakala(
   _sonraki: NextFunction,
 ): void {
   kayit.hata('İstek hatası', hata);
-  yanit.status(500).json({ ok: false, hata: 'Sunucuda bir hata oldu' });
+  yanit.status(500).json({ ok: false, hata: 'sunucu-hatasi' });
 }

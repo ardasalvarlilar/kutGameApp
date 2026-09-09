@@ -81,6 +81,44 @@ Metro sembolik linkleri iyi izlemediği için `pnpm-workspace.yaml`'da
 `nodeLinker: hoisted` açık. Motor, `apps/mobile` tarafından TypeScript
 kaynağı olarak doğrudan tüketiliyor — ara derleme adımı yok.
 
+### Dil (i18n)
+
+Metinlerin tamamı `apps/mobile/src/dil/` altında iki JSON dosyasında:
+`tr.json` ve `en.json`. Kodda gömülü tek bir cümle yok. Varsayılan **Türkçe**;
+tercih cihazda saklanıyor (`ag/depo.ts`), hesapta değil — dil telefonun
+özelliği, hesabın değil.
+
+**Anahtarlar tipli.** `MetinAnahtari`, `tr.json`ın anahtarlarından türüyor:
+`t('lobi.hizliOyan')` derlenmez. `en.json` bir anahtarı kaçırırsa
+`dil/cevir.ts`teki `EN_TAM` satırı derlemeyi kırar — çeviri eksiği derleme
+zamanında yakalanıyor. 345 metinle bu bir konfor değil: yazım hatası sessizce
+ekranda ham anahtar gösterirdi.
+
+Kütüphane **yok**. i18next'in çoğul/bağlam makinesine ihtiyaç duyan tek bir
+metin yok; karşılığında tipli anahtarları kaybederdik. Yer tutucular
+`{ad}` biçiminde, `cevir` doldurur.
+
+Dosya ikiye ayrık ve bu şart: `dil/cevir.ts` **saf** (JSX yok, React yok),
+`dil/index.tsx` sağlayıcı. `zaman.ts` ve `hataMetinleri.ts` gibi saf modüller
+çekirdeği kullanıyor ve testleri React'siz koşuyor — sağlayıcıyı import
+etselerdi vitest JSX'i çözemiyordu.
+
+**Sunucu da kod gönderiyor.** Eskiden hazır Türkçe cümle yolluyordu ve
+İngilizce oynayan oyuncu Türkçe hata görüyordu. Artık
+`packages/server/src/tipler/hatalar.ts`teki kodlardan biri gidiyor, çeviriyi
+istemci yapıyor (`hataMetinleri.ts`). Motorun hata kodları (motor kuralı #4)
+zaten böyle çalışıyordu; bu onun sunucu tarafındaki karşılığı. Tanınmayan kod
+olduğu gibi gösteriliyor — eski bir uygulama sürümü yeni bir kodla
+karşılaşırsa boş ekran değil, ham kod görür.
+
+Hata metni sürücüde değil **ekranda** çevriliyor: sürücü ham kodu taşıyor,
+yoksa dil değiştiğinde ekrandaki hata eski dilde donmuş kalırdı.
+
+Tur şartı açıklamaları (`2 × üçlü küt`) motorda Türkçe duruyor ve öyle
+kalmalı — motor çevrilemez, KURALLAR.md'nin diliyle yazılmış bir
+spesifikasyon. Ekran metnini tur numarasından türetiyor
+(`TUR_SART_ANAHTARLARI`).
+
 ### Ekranlar
 
 Akış tek yerde: `src/Uygulama.tsx`.
@@ -354,6 +392,39 @@ Arayüz **landscape**'e kilitli (Okey 101 Plus düzeni):
   **aşağı sürükleyerek** çekersin. Atma ve çekme masada uçan taşla canlanır.
   Bunların ayrı `ÇEK` / `YERDEN AL` / `AT` düğmesi **yoktur** — hareket
   yeterli, düğme yan paneli şişiriyordu
+- **Bütün taş animasyonları motorun hareket listesinden sürülüyor**
+  (`OyunDurumu.sonHareketler`, `src/ucuslar.ts`). Dört tür hareket var:
+  `cekim` (ortadan oyuncuya), `atma` (oyuncudan ortaya), `isleme` (oyuncudan
+  **duran** bir pere) ve `indirme` (oyuncudan **o an yaratılan** pere — açma
+  ve fazladan per indirme). Taş herkesin gördüğü bir taşsa **açık**, desteden geldiyse
+  **kapalı** uçar; kararı motor veriyor, ekran yalnızca noktaları kuruyor.
+  Bir çalma üç uçuş demek: sırası gelenin **kapalı** desteden çekişi, çalanın
+  **açık** taşı, sonra çalanın **kapalı** ceza taşı. Bu yüzden ekranda tek
+  bir `ucus` değil bir **kuyruk** var.
+  Ekran bunu eskiden atık/deste sayaçlarının farkından **tahmin ediyordu** ve
+  dört yerde yanılıyordu: yerden alınan taş kapalı uçuyordu (oysa herkes
+  gördü), ceza taşı hiç görünmüyordu, üç hareketten yalnızca biri çiziliyordu,
+  ve **sıra yanlıştı** — atış ayrı bir effect'te çıkarıldığı için iki
+  effect'in tanım sırası kuyruğa girişi belirliyor, atış çekişten önce
+  oynuyordu. Artık sırayı motor veriyor (`sira` alanı) ve ekranda **tek**
+  effect var
+- **Hareket listesi silinmiyor, üstüne ekleniyor.** Sürücü bir sırayı tek
+  tick'te oynuyor (çek → işle → at) ve ekrana yalnızca son durum ulaşıyor;
+  her hamlede sıfırlansaydı çekiş animasyonu ekrana hiç varamazdı, üstüne
+  yazsaydı işleme çekişi silerdi. Tekrarı liste değil **sıra numarası**
+  önlüyor: istemci yalnızca kendi gördüğünden büyük olanları oynatıyor
+- İşlemenin hedefi perin kendisi, sahibinin koltuğu değil — başkasının perine
+  de işlenebiliyor (§6). Per'in masa içindeki konumu `measureInWindow` ile
+  ölçülüyor (ekran koordinatından masanınki çıkarılarak); ölçülemezse sahibin
+  yönüne yaklaşık uçuyor — animasyonu düşürmek "taş nereye gitti"yi yine
+  cevapsız bırakırdı
+- **`indirme` için de aynı ölçüm işliyor** ve bu ilk bakışta şaşırtıcı: per o
+  anda yaratılıyor. Ama hareket ekrana ulaştığında yeni per **aynı render'da
+  çizilmiş** oluyor, dolayısıyla ölçülebiliyor. Canlı masada doğrulandı:
+  `indirme -> indirme -> indirme` partisinde üç perin de gerçek koordinatı
+  ölçüldü, yedeğe düşülmedi
+- `OKEY AL`da okeyin **yerine konan** taşlar uçuyor; okeyin perden ıstakaya
+  dönüşü uçmuyor — "perden oyuncuya" diye bir hareket yönü yok
 - **"ÇİFTİM VAR" bir talep değil, hamlenin kendisi** (KURALLAR.md §9 0.10).
   Basıldığı anda taş + 1 ceza taşı oyuncuya gelir, pencere kapanır, bekleyen
   normal talepler düşer. Düğme yalnızca atılan taşın **birebir eşi gerçekten
@@ -422,15 +493,35 @@ perindeki okey de yere gidiyordu. Seçim varsa niyet açıktır — ne seçildiy
 gider, okey dahil.
 
 Çevrimdışı sürücüde diğer üç oyuncu `@kut/politika`nın `bot.ts`'i ile oynuyor: çeker,
-açabiliyorsa turun şartını arayıp açar, açtıysa işler, sonra en az işe
-yarayan taşı atar. Çevrimiçi masada da aynı bot oturabilir (bkz. bot koltukları);
-masada bot koltuğu varsa onları da **aynı kod** oynatıyor
-(`packages/server/src/soket/masaOturumu.ts`), süresi dolanın yerine de yine o.
+açabiliyorsa turun şartını arayıp açar, açtıysa **fazladan per indirir**
+(§6), sonra işler, en sonunda en az işe yarayan taşı atar. Çevrimiçi masada da
+aynı bot oturabilir (bkz. bot koltukları); masada bot koltuğu varsa onları da
+**aynı kod** oynatıyor (`packages/server/src/soket/masaOturumu.ts`), süresi
+dolanın yerine de yine o.
+
+`PER_INDIR` işlemeden **önce** deneniyor: işleme tek taş gönderiyor ve
+`islenebilir` uyan ilk taşı seçiyor — o taş elde kurulmuş bir perin parçasıysa
+peri bozuyor, sonuçta 3 taş yerine 1 taş iniyor.
+
+**Bot çalıyor da** (`botTalebi`). Bu ayrı bir yol olmak zorundaydı: `botAksiyonu`
+yalnızca sıra bottayken çağrılıyor, çalma ise sıra **başkasındayken** yapılan
+bir hamle (KURALLAR.md §5). Sürücüler pencere açılınca ayrı bir zamanlayıcıyla
+soruyor. Eşik yerden almadan yüksek: talep bağlayıcı (§5.6) ve bedeli 5 puan +
+bir ceza taşı, o yüzden taşın **yeni bir per kurması** ya da turun açılışını
+açtırması aranıyor. Yerden alma bedelsiz olduğu için eşiği düşük — taş herhangi
+bir işe yarıyorsa alınıyor.
+
+Talep gecikmesi **iki kademeli** ve bu şart: sırası gelen bot, çalabilecek
+insan yoksa 1.4 saniyede oynayıp pencereyi kapatıyor. Tek bir 2 saniyelik
+gecikme, **insanın attığı** taşlar için botların talebini fiilen imkânsız
+kılıyordu — pencere hep önce kapanıyordu. İnsan çalabiliyorken gecikme uzun
+(ona tepki payı), değilken kısa.
 
 Bot **alamayacağı taşı istememeli**: motor reddettiğinde durum değişmediği
-için sürücünün effect'i yeniden koşmuyor ve sıra kilitleniyor. Tur 15'te
-"çifti bende" hakkı sırası gelenin bedelsiz hakkını geçtiği için
-(KURALLAR.md §5) `yerdenAlmaliMi` bunu ayrıca kontrol ediyor. Güvenlik ağı
+için sürücünün effect'i yeniden koşmuyor ve sıra kilitleniyor. `botTalebi` bu
+yüzden motorun bütün ön koşullarını kendisi eliyor (atan mı, sırası mı, zaten
+talep etmiş mi, deste boş mu); `bot-simulasyon.test.ts` "hiçbir talep motorca
+reddedilmiyor" diye ayrıca doğruluyor. Güvenlik ağı
 olarak sürücü, reddedilen her hamlede **faza uygun** bir kurtarma deniyor
 (`sureDolduAksiyonu`) ve yine ilerleyemezse `botTetik` sayacını artırıp
 tekrar deniyor — kurtarmanın faza uygun olması şart, çekme fazında "at"

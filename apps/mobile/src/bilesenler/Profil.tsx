@@ -34,15 +34,16 @@ import { Alan, AnaDugme, Baglanti, Hata } from './Alan';
 import { Arkadaslar } from './Arkadaslar';
 import { Avatar } from './Avatar';
 import { useKimlik } from '../ag/kimlik';
+import { DILLER, DIL_ADLARI, useCeviri, useDil, type MetinAnahtari } from '../dil';
 import { YASAL } from '../ag/yasal';
 import { renkler } from '../tema';
 
 type Sekme = 'profil' | 'arkadaslar' | 'ayarlar';
 
-const SEKME_ETIKETLERI: Record<Sekme, string> = {
-  profil: 'PROFİL',
-  arkadaslar: 'ARKADAŞLAR',
-  ayarlar: 'AYARLAR',
+const SEKME_ANAHTARLARI: Record<Sekme, MetinAnahtari> = {
+  profil: 'profil.sekmeProfil',
+  arkadaslar: 'profil.sekmeArkadaslar',
+  ayarlar: 'profil.sekmeAyarlar',
 };
 
 export interface ProfilOzellikleri {
@@ -59,6 +60,7 @@ export function Profil({
   baslangicSekmesi = 'profil',
 }: ProfilOzellikleri) {
   const kimlik = useKimlik();
+  const t = useCeviri();
   const oyuncu = kimlik.oyuncu;
 
   const [sekme, setSekme] = useState<Sekme>(baslangicSekmesi);
@@ -87,7 +89,7 @@ export function Profil({
               {oyuncu?.ad ?? '—'}
             </Text>
             <Text style={stil.satir} numberOfLines={1}>
-              {oyuncu?.eposta ?? 'misafir hesabı'}
+              {oyuncu?.eposta ?? t('profil.misafirHesabi')}
             </Text>
             {kodum !== null ? <Text style={stil.kod}>{kodum}</Text> : null}
           </View>
@@ -105,7 +107,7 @@ export function Profil({
               ]}
             >
               <Text style={[stil.rayYazi, sekme === secenek && stil.rayYaziAcik]}>
-                {SEKME_ETIKETLERI[secenek]}
+                {t(SEKME_ANAHTARLARI[secenek])}
               </Text>
               {secenek === 'arkadaslar' && gelenSayisi > 0 ? (
                 <View style={stil.rozet}>
@@ -117,7 +119,7 @@ export function Profil({
         </View>
 
         <View style={stil.solAlt}>
-          <AnaDugme etiket="LOBİYE DÖN" onBas={onKapat} tur="sade" />
+          <AnaDugme etiket={t('profil.lobiyeDon')} onBas={onKapat} tur="sade" />
         </View>
       </View>
 
@@ -144,36 +146,29 @@ function Kutucuk({ deger, etiket }: { readonly deger: number; readonly etiket: s
 
 function ProfilSekmesi() {
   const kimlik = useKimlik();
+  const t = useCeviri();
   const oyuncu = kimlik.oyuncu;
   if (oyuncu === null) return null;
 
   return (
     <ScrollView contentContainerStyle={stil.icerik}>
-      <Text style={stil.bolum}>İSTATİSTİK</Text>
+      <Text style={stil.bolum}>{t('profil.istatistik')}</Text>
       <View style={stil.kutucukSirasi}>
-        <Kutucuk deger={oyuncu.oynananEl} etiket="EL" />
-        <Kutucuk deger={oyuncu.kazanilanEl} etiket="EL GALİBİYETİ" />
-        <Kutucuk deger={oyuncu.oynananMac} etiket="MAÇ" />
-        <Kutucuk deger={oyuncu.kazanilanMac} etiket="MAÇ GALİBİYETİ" />
+        <Kutucuk deger={oyuncu.oynananEl} etiket={t('profil.el')} />
+        <Kutucuk deger={oyuncu.kazanilanEl} etiket={t('profil.elGalibiyeti')} />
+        <Kutucuk deger={oyuncu.oynananMac} etiket={t('profil.mac')} />
+        <Kutucuk deger={oyuncu.kazanilanMac} etiket={t('profil.macGalibiyeti')} />
       </View>
 
       {oyuncu.misafirMi ? (
         <View style={stil.uyariKutusu}>
-          <Text style={stil.uyariBaslik}>MİSAFİR OYNUYORSUN</Text>
-          <Text style={stil.uyariMetin}>
-            İlerlemen bu telefonda duruyor. Uygulamayı silersen ya da telefonu
-            değiştirirsen gider. Çıkış yapıp e-postayla hesap açtığında aynı
-            ilerleme yeni hesabına taşınır.
-          </Text>
+          <Text style={stil.uyariBaslik}>{t('profil.misafirBaslik')}</Text>
+          <Text style={stil.uyariMetin}>{t('profil.misafirMetin')}</Text>
         </View>
       ) : null}
 
-      <Text style={stil.bolum}>ARKADAŞ KODUN</Text>
-      <Text style={stil.aciklama}>
-        Arkadaşların seni bu kodla ekler. Görünen ad benzersiz olmadığı,
-        e-postayla aramak da hangi adreslerin kayıtlı olduğunu sızdıracağı için
-        arama yalnızca kodla yapılıyor.
-      </Text>
+      <Text style={stil.bolum}>{t('profil.arkadasKodun')}</Text>
+      <Text style={stil.aciklama}>{t('profil.kodAciklama')}</Text>
       <Text style={stil.kodBuyuk} selectable>
         {kimlik.arkadaslar?.kodum ?? oyuncu.arkadasKodu ?? '…'}
       </Text>
@@ -185,6 +180,7 @@ function ProfilSekmesi() {
 
 function AyarlarSekmesi({ onSil }: { readonly onSil: () => void }) {
   const kimlik = useKimlik();
+  const { dil, diliDegistir, t } = useDil();
   const oyuncu = kimlik.oyuncu;
 
   const [ad, setAd] = useState(oyuncu?.ad ?? '');
@@ -208,11 +204,17 @@ function AyarlarSekmesi({ onSil }: { readonly onSil: () => void }) {
 
   return (
     <ScrollView contentContainerStyle={stil.icerik} keyboardShouldPersistTaps="handled">
-      <Text style={stil.bolum}>GÖRÜNEN AD</Text>
-      <Alan etiket="Ad" value={ad} onChangeText={setAd} maxLength={24} autoCapitalize="words" />
+      <Text style={stil.bolum}>{t('profil.gorunenAd')}</Text>
+      <Alan
+        etiket={t('profil.ad')}
+        value={ad}
+        onChangeText={setAd}
+        maxLength={24}
+        autoCapitalize="words"
+      />
       <AnaDugme
-        etiket="ADI KAYDET"
-        onBas={() => void calistir(() => kimlik.adiDegistir(ad), 'Ad güncellendi')}
+        etiket={t('profil.adiKaydet')}
+        onBas={() => void calistir(() => kimlik.adiDegistir(ad), t('profil.adGuncellendi'))}
         aktif={ad.trim().length >= 2 && ad.trim() !== oyuncu?.ad && !bekliyor}
         bekliyor={bekliyor}
       />
@@ -221,28 +223,24 @@ function AyarlarSekmesi({ onSil }: { readonly onSil: () => void }) {
           yok, alani gostermek "neden calismiyor" sorusu uretirdi. */}
       {oyuncu !== null && !oyuncu.misafirMi ? (
         <>
-          <Text style={stil.bolum}>PAROLA</Text>
-          <Text style={stil.aciklama}>
-            Mevcut parolan soruluyor: oturum bilgisi telefonda 30 gün duruyor,
-            yalnızca ona güvenmek telefonu eline geçiren birine hesabı devretmek
-            olurdu.
-          </Text>
+          <Text style={stil.bolum}>{t('profil.parola')}</Text>
+          <Text style={stil.aciklama}>{t('profil.parolaAciklama')}</Text>
           <Alan
-            etiket="Mevcut parola"
+            etiket={t('profil.mevcutParola')}
             value={mevcutParola}
             onChangeText={setMevcutParola}
             secureTextEntry
             maxLength={72}
           />
           <Alan
-            etiket="Yeni parola (en az 8 karakter)"
+            etiket={t('profil.yeniParola')}
             value={yeniParola}
             onChangeText={setYeniParola}
             secureTextEntry
             maxLength={72}
           />
           <AnaDugme
-            etiket="PAROLAYI DEĞİŞTİR"
+            etiket={t('profil.parolayiDegistir')}
             onBas={() =>
               void calistir(async () => {
                 const sorun = await kimlik.parolayiDegistir(mevcutParola, yeniParola);
@@ -251,7 +249,7 @@ function AyarlarSekmesi({ onSil }: { readonly onSil: () => void }) {
                   setYeniParola('');
                 }
                 return sorun;
-              }, 'Parolan değişti')
+              }, t('profil.parolaDegisti'))
             }
             aktif={parolaTamam && !bekliyor}
             bekliyor={bekliyor}
@@ -259,9 +257,9 @@ function AyarlarSekmesi({ onSil }: { readonly onSil: () => void }) {
         </>
       ) : null}
 
-      <Text style={stil.bolum}>ENGELLEDİKLERİN</Text>
+      <Text style={stil.bolum}>{t('profil.engelledikerin')}</Text>
       {kimlik.engellenenler.length === 0 ? (
-        <Text style={stil.aciklama}>Kimseyi engellemedin.</Text>
+        <Text style={stil.aciklama}>{t('profil.kimseyiEngellemedin')}</Text>
       ) : (
         kimlik.engellenenler.map((kisi) => (
           <View key={kisi.id} style={stil.engelSatiri}>
@@ -271,7 +269,7 @@ function AyarlarSekmesi({ onSil }: { readonly onSil: () => void }) {
             </Text>
             <View style={stil.engelDugmesi}>
               <AnaDugme
-                etiket="KALDIR"
+                etiket={t('profil.kaldir')}
                 onBas={() => void calistir(() => kimlik.engelKaldir(kisi.id))}
                 tur="sade"
               />
@@ -283,20 +281,34 @@ function AyarlarSekmesi({ onSil }: { readonly onSil: () => void }) {
       {bilgi !== null ? <Text style={stil.bilgi}>{bilgi}</Text> : null}
       <Hata metin={hata} />
 
-      <Text style={stil.bolum}>YASAL</Text>
+      <Text style={stil.bolum}>{t('profil.dil')}</Text>
+      <Text style={stil.aciklama}>{t('profil.dilAciklama')}</Text>
+      <View style={stil.dilSatiri}>
+        {DILLER.map((secenek) => (
+          <View key={secenek} style={stil.esit}>
+            <AnaDugme
+              etiket={DIL_ADLARI[secenek]}
+              onBas={() => diliDegistir(secenek)}
+              tur={dil === secenek ? 'vurgu' : 'cizgi'}
+            />
+          </View>
+        ))}
+      </View>
+
+      <Text style={stil.bolum}>{t('profil.yasal')}</Text>
       <View style={stil.yasal}>
-        <Baglanti etiket="Gizlilik" adres={YASAL.gizlilik} />
-        <Baglanti etiket="Koşullar" adres={YASAL.kosullar} />
-        <Baglanti etiket="Destek" adres={YASAL.destek} />
+        <Baglanti etiket={t('profil.gizlilik')} adres={YASAL.gizlilik} />
+        <Baglanti etiket={t('profil.kosullar')} adres={YASAL.kosullar} />
+        <Baglanti etiket={t('profil.destek')} adres={YASAL.destek} />
       </View>
 
       {/* Geri donusu olmayan islemler en altta ve ayri: yanlislikla basilan
           bir dugmenin diger dugmelere benzemesi kotu bir fikir. */}
       <View style={stil.tehlikeBolgesi}>
-        <AnaDugme etiket="ÇIKIŞ YAP" onBas={() => void kimlik.cikisYap()} tur="cizgi" />
+        <AnaDugme etiket={t('profil.cikisYap')} onBas={() => void kimlik.cikisYap()} tur="cizgi" />
         {/* App Store 5.1.1(v): hesap uygulamanin ICINDEN silinebilmeli.
             "Bize e-posta at" yetmiyor, denetimde ret sebebi. */}
-        <AnaDugme etiket="HESABIMI SİL" onBas={onSil} tur="tehlike" />
+        <AnaDugme etiket={t('profil.hesabimiSil')} onBas={onSil} tur="tehlike" />
       </View>
     </ScrollView>
   );
@@ -306,6 +318,7 @@ function AyarlarSekmesi({ onSil }: { readonly onSil: () => void }) {
 
 function SilmeOnayi({ onVazgec }: { readonly onVazgec: () => void }) {
   const kimlik = useKimlik();
+  const t = useCeviri();
   const [hata, setHata] = useState<string | null>(null);
   const [bekliyor, setBekliyor] = useState(false);
 
@@ -320,27 +333,24 @@ function SilmeOnayi({ onVazgec }: { readonly onVazgec: () => void }) {
   return (
     <View style={stil.onayGovde}>
       <View style={stil.onayKutu}>
-        <Text style={stil.onayBaslik}>HESABINI SİLMEK ÜZERESİN</Text>
-        <Text style={stil.onayMetin}>
-          Hesabın, görünen adın, e-posta adresin, istatistiklerin, arkadaş
-          listen ve engel listen kalıcı olarak silinir.
-        </Text>
-        <Text style={stil.onayUyari}>Bu işlem geri alınamaz.</Text>
+        <Text style={stil.onayBaslik}>{t('profil.silmeBaslik')}</Text>
+        <Text style={stil.onayMetin}>{t('profil.silmeMetin')}</Text>
+        <Text style={stil.onayUyari}>{t('profil.silmeUyari')}</Text>
         <Hata metin={hata} />
         <View style={stil.onayDugmeler}>
           <View style={stil.esit}>
-            <AnaDugme etiket="VAZGEÇ" onBas={onVazgec} tur="sade" />
+            <AnaDugme etiket={t('profil.vazgec')} onBas={onVazgec} tur="sade" />
           </View>
           <View style={stil.esit}>
             <AnaDugme
-              etiket="EVET, SİL"
+              etiket={t('profil.evetSil')}
               onBas={() => void sil()}
               bekliyor={bekliyor}
               tur="tehlike"
             />
           </View>
         </View>
-        <Baglanti etiket="Silme hakkında ayrıntı" adres={YASAL.hesapSilme} ortala />
+        <Baglanti etiket={t('profil.silmeAyrinti')} adres={YASAL.hesapSilme} ortala />
       </View>
     </View>
   );
@@ -465,4 +475,5 @@ const stil = StyleSheet.create({
   onayUyari: { color: renkler.uyari, fontSize: 12, fontWeight: '800' },
   onayDugmeler: { flexDirection: 'row', gap: 8, marginTop: 4 },
   esit: { flex: 1 },
+  dilSatiri: { flexDirection: 'row', gap: 8 },
 });

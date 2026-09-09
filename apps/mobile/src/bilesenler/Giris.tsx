@@ -16,6 +16,7 @@ import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Alan, AnaDugme, Baglanti, Hata } from './Alan';
 import { useKimlik } from '../ag/kimlik';
+import { useCeviri } from '../dil';
 import { SUNUCU_ADRESI } from '../ag/sunucu';
 import { YASAL } from '../ag/yasal';
 import { renkler } from '../tema';
@@ -26,6 +27,7 @@ type Sifirlama = 'kapali' | 'kod-iste' | 'kod-gir';
 
 export function Giris() {
   const kimlik = useKimlik();
+  const t = useCeviri();
   const [sekme, setSekme] = useState<Sekme>('giris');
   const [sifirlama, setSifirlama] = useState<Sifirlama>('kapali');
 
@@ -65,7 +67,7 @@ export function Giris() {
       const sorun = await kimlik.parolaKoduIste(eposta);
       if (sorun === null) {
         setSifirlama('kod-gir');
-        setBilgi('Adres kayıtlıysa kod gönderildi. Gelen kutunu kontrol et.');
+        setBilgi(t('giris.kodGonderildi'));
       }
       return sorun;
     });
@@ -95,25 +97,25 @@ export function Giris() {
     >
       <View style={stil.sol}>
         <Text style={stil.oyunAdi}>KÜT</Text>
-        <Text style={stil.altBaslik}>okey taşlarıyla · 4 oyuncu · 16 tur</Text>
+        <Text style={stil.altBaslik}>{t('giris.altBaslik')}</Text>
 
         <View style={stil.misafirKutu}>
           <AnaDugme
-            etiket="MİSAFİR OLARAK OYNA"
+            etiket={t('giris.misafirOyna')}
             onBas={misafirOyna}
             bekliyor={bekliyor === 'misafir'}
             aktif={bekliyor === null}
           />
-          <Text style={stil.ipucu}>Hemen başla. Sonra hesap açarsan ilerlemen aynı kalır.</Text>
+          <Text style={stil.ipucu}>{t('giris.misafirIpucu')}</Text>
         </View>
 
         <View style={stil.yasal}>
-          <Baglanti etiket="Gizlilik" adres={YASAL.gizlilik} />
-          <Baglanti etiket="Koşullar" adres={YASAL.kosullar} />
-          <Baglanti etiket="Destek" adres={YASAL.destek} />
+          <Baglanti etiket={t('giris.gizlilik')} adres={YASAL.gizlilik} />
+          <Baglanti etiket={t('giris.kosullar')} adres={YASAL.kosullar} />
+          <Baglanti etiket={t('giris.destek')} adres={YASAL.destek} />
         </View>
         <Text style={stil.adres} numberOfLines={1}>
-          sunucu: {SUNUCU_ADRESI.replace(/^https?:\/\//, '')}
+          {t('giris.sunucu', { adres: SUNUCU_ADRESI.replace(/^https?:\/\//, '') })}
         </Text>
       </View>
 
@@ -124,7 +126,7 @@ export function Giris() {
               {(['giris', 'kayit'] as const).map((secenek) => (
                 <View key={secenek} style={stil.sekme}>
                   <AnaDugme
-                    etiket={secenek === 'giris' ? 'GİRİŞ YAP' : 'HESAP AÇ'}
+                    etiket={t(secenek === 'giris' ? 'giris.girisYap' : 'giris.hesapAc')}
                     onBas={() => {
                       setSekme(secenek);
                       setHata(null);
@@ -138,28 +140,28 @@ export function Giris() {
             <ScrollView contentContainerStyle={stil.form} keyboardShouldPersistTaps="handled">
               {sekme === 'kayit' ? (
                 <Alan
-                  etiket="Görünen ad"
+                  etiket={t('giris.gorunenAd')}
                   value={ad}
                   onChangeText={setAd}
-                  placeholder="Masada bu ad görünecek"
+                  placeholder={t('giris.gorunenAdIpucu')}
                   autoCapitalize="words"
                   maxLength={24}
                 />
               ) : null}
 
               <Alan
-                etiket="E-posta"
+                etiket={t('giris.eposta')}
                 value={eposta}
                 onChangeText={setEposta}
-                placeholder="ornek@eposta.com"
+                placeholder={t('giris.epostaIpucu')}
                 keyboardType="email-address"
                 textContentType="emailAddress"
               />
               <Alan
-                etiket="Parola"
+                etiket={t('giris.parola')}
                 value={parola}
                 onChangeText={setParola}
-                placeholder={sekme === 'kayit' ? 'En az 8 karakter' : '••••••••'}
+                placeholder={t(sekme === 'kayit' ? 'giris.parolaEnAz' : 'giris.parolaGizli')}
                 secureTextEntry
                 // iOS'un parola yoneticisi dogru alani tanisin diye ayri ipucu.
                 textContentType={sekme === 'kayit' ? 'newPassword' : 'password'}
@@ -170,7 +172,7 @@ export function Giris() {
               <Hata metin={hata} />
 
               <AnaDugme
-                etiket={sekme === 'giris' ? 'GİRİŞ YAP' : 'HESABI OLUŞTUR'}
+                etiket={t(sekme === 'giris' ? 'giris.girisYap' : 'giris.hesabiOlustur')}
                 onBas={formuGonder}
                 aktif={formTamam && bekliyor === null}
                 bekliyor={bekliyor === 'form'}
@@ -178,7 +180,7 @@ export function Giris() {
 
               {sekme === 'giris' ? (
                 <Baglanti
-                  etiket="Parolamı unuttum"
+                  etiket={t('giris.parolamiUnuttum')}
                   onBas={() => {
                     setSifirlama('kod-iste');
                     setHata(null);
@@ -186,22 +188,19 @@ export function Giris() {
                   ortala
                 />
               ) : (
-                <Text style={stil.sozlesme}>
-                  Hesap açarak Kullanım Koşulları'nı ve Gizlilik Politikası'nı kabul etmiş
-                  olursun.
-                </Text>
+                <Text style={stil.sozlesme}>{t('giris.sozlesme')}</Text>
               )}
             </ScrollView>
           </>
         ) : (
           <ScrollView contentContainerStyle={stil.form} keyboardShouldPersistTaps="handled">
-            <Text style={stil.baslik}>PAROLA SIFIRLAMA</Text>
+            <Text style={stil.baslik}>{t('giris.sifirlamaBaslik')}</Text>
 
             <Alan
-              etiket="E-posta"
+              etiket={t('giris.eposta')}
               value={eposta}
               onChangeText={setEposta}
-              placeholder="ornek@eposta.com"
+              placeholder={t('giris.epostaIpucu')}
               keyboardType="email-address"
               textContentType="emailAddress"
               editable={sifirlama === 'kod-iste'}
@@ -210,20 +209,20 @@ export function Giris() {
             {sifirlama === 'kod-gir' ? (
               <>
                 <Alan
-                  etiket="E-postana gelen kod"
+                  etiket={t('giris.gelenKod')}
                   value={kod}
                   onChangeText={(yazi) => setKod(yazi.replace(/\D/g, ''))}
-                  placeholder="6 hane"
+                  placeholder={t('giris.altiHane')}
                   keyboardType="number-pad"
                   maxLength={6}
                   // iOS kodu klavye ustunde onersin diye.
                   textContentType="oneTimeCode"
                 />
                 <Alan
-                  etiket="Yeni parola"
+                  etiket={t('giris.yeniParola')}
                   value={yeniParola}
                   onChangeText={setYeniParola}
-                  placeholder="En az 8 karakter"
+                  placeholder={t('giris.parolaEnAz')}
                   secureTextEntry
                   textContentType="newPassword"
                 />
@@ -235,21 +234,21 @@ export function Giris() {
 
             {sifirlama === 'kod-iste' ? (
               <AnaDugme
-                etiket="KOD GÖNDER"
+                etiket={t('giris.kodGonder')}
                 onBas={koduIste}
                 aktif={eposta.trim().length > 3 && bekliyor === null}
                 bekliyor={bekliyor === 'form'}
               />
             ) : (
               <AnaDugme
-                etiket="PAROLAYI DEĞİŞTİR"
+                etiket={t('giris.parolayiDegistir')}
                 onBas={parolayiDegistir}
                 aktif={kod.length >= 4 && yeniParola.length >= 8 && bekliyor === null}
                 bekliyor={bekliyor === 'form'}
               />
             )}
 
-            <AnaDugme etiket="VAZGEÇ" onBas={sifirlamayiKapat} tur="cizgi" />
+            <AnaDugme etiket={t('giris.vazgec')} onBas={sifirlamayiKapat} tur="cizgi" />
           </ScrollView>
         )}
       </View>

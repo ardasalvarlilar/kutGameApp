@@ -203,7 +203,7 @@ describe('cevrimici masa', () => {
         });
         expect(kimlikHirsizligi.ok).toBe(false);
         if (!kimlikHirsizligi.ok) {
-          expect(kimlikHirsizligi.hata).toContain('adına');
+          expect(kimlikHirsizligi.hata).toBe('baskasinin-adina');
         }
 
         // KURALLAR.md §1 — baslayan bir fazla tas alir ve CEKMEDEN atar.
@@ -330,7 +330,7 @@ describe('cevrimici masa', () => {
   it.skipIf(!mongoVar)('jetonsuz soket hic acilmiyor', async () => {
     const soket = istemciAc(kok, { auth: {}, transports: ['websocket'], forceNew: true });
     const hata = await new Promise<Error>((coz) => soket.once('connect_error', coz));
-    expect(hata.message).toContain('Jeton');
+    expect(hata.message).toBe('jeton-gerekli');
     soket.disconnect();
   });
 

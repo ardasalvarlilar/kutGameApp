@@ -20,12 +20,12 @@ export function kimlikDogrula(istek: Request, yanit: Response, sonraki: NextFunc
   const jeton = baslik?.startsWith('Bearer ') === true ? baslik.slice(7) : null;
 
   if (jeton === null) {
-    yanit.status(401).json({ ok: false, hata: 'Jeton gerekli' });
+    yanit.status(401).json({ ok: false, hata: 'jeton-gerekli' });
     return;
   }
   const icerik = jetonuCoz(jeton);
   if (icerik === null) {
-    yanit.status(401).json({ ok: false, hata: 'Jeton geçersiz' });
+    yanit.status(401).json({ ok: false, hata: 'jeton-gecersiz' });
     return;
   }
   istek.oyuncuId = icerik.oyuncuId;

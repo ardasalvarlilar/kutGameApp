@@ -107,8 +107,104 @@ export interface OyunDurumu {
    * aldi" varsayiyor ve calinan tas yanlis oyuncuya ucuyordu.
    */
   readonly sonCalan: OyuncuId | null;
+  /**
+   * SON tas hareketleri — ekranin animasyonu icin. Kural karari degil.
+   *
+   * Neden durumda: istemci bunlari tahmin edemiyordu. Eskiden atik/deste
+   * sayaclarindaki farktan cikariliyordu ve uc yerde yaniliyordu — yerden
+   * alinan tas kapali ucuyordu (oysa herkes gordu), calmanin ceza tasi hic
+   * gorunmuyordu, tek bir aksiyonun urettigi UC hareket (ceken + calan +
+   * ceza) tek bir ucusa siginmiyordu.
+   *
+   * **Liste SILINMEZ, uzerine EKLENIR** ve her hareket kendi `sira`sini
+   * tasir. Iki sey birden bunu zorunlu kildi:
+   *
+   *  1. Surucu bir sirayi tek seferde oynuyor (cek → isle → at) ve ekrana
+   *     yalnizca SON durum ulasiyor. Her aksiyonda sifirlansaydi cekis
+   *     animasyonu ekrana hic varmadan silinirdi — ilk yazimda tam olarak
+   *     bu oldu. Ustune yazsaydi da isleme cekisi silerdi.
+   *  2. Sira onemli: once cekis, sonra isleme, en son atis. Sira numarasi
+   *     olmadan bu ekrandaki effect tanim sirasina kaliyordu ve atis cekisten
+   *     once oynuyordu.
+   *
+   * Istemci `sira`si kendi gordugunden buyuk olanlari oynatiyor; boylece ayni
+   * gorunum iki kez gelse de (yeniden baglanmada sunucu mevcut durumu
+   * dogrudan gonderiyor) animasyon tekrarlanmiyor.
+   */
+  readonly sonHareketler: readonly TasHareketi[];
+  /** Verilmis en buyuk `sira`. Istemcinin "neyi gordum" esigi. */
+  readonly sonHareketNo: number;
   readonly sonuc: ElSonucu | null;
 }
+
+/** Bir tasin nereden geldigi. Ekran acik/kapali ucusa buna gore karar veriyor. */
+export type CekimKaynagi =
+  /** Desteden cekildi — kimse gormedi, kapali ucar. */
+  | 'deste'
+  /** Sirasi gelen oyuncu atilan tasi bedelsiz aldi (§5). Herkes gordu. */
+  | 'atik'
+  /** Sirasi gelmeyen oyuncu tasi caldi (§5). Herkes gordu. */
+  | 'calma'
+  /** Calmanin bedeli: desteden bir tas (§5). Kapali ucar. */
+  | 'ceza';
+
+/**
+ * Masadaki bir tas hareketi — SIRA NUMARASIZ govdesi.
+ *
+ * Numarayi `hareketlerle` veriyor; ureten kodun saymasi gerekmiyor.
+ * Ayri tip olmasinin sebebi TypeScript: `Omit<TasHareketi, 'sira'>` birlesim
+ * uzerinde dagilmiyor, ortak alanlara cokup `kaynak`/`perId`'yi dusuruyor.
+ */
+export type TasHareketiGovdesi =
+  /** Ortadan oyuncuya: deste, yerden alma, calma ya da ceza tasi. */
+  | {
+      readonly oyuncu: OyuncuId;
+      readonly tip: 'cekim';
+      readonly kaynak: CekimKaynagi;
+      /**
+       * Tasin kendisi — YALNIZCA herkesin gordugu taslarda dolu.
+       *
+       * Desteden gelenlerde null: motor kurali #3, gizli bilgi projeksiyondan
+       * gecmez. Burada ayrica filtreye gerek kalmiyor, cunku alan zaten
+       * hicbir zaman gizli bir tas tasimiyor.
+       */
+      readonly tas: Tas | null;
+      /** Tas kimin atik yiginindan alindi? Desteden gelende null. */
+      readonly kimden: OyuncuId | null;
+    }
+  /** Oyuncudan ortaya: atilan tas. Atilan tas herkesin gordugu tastir. */
+  | { readonly oyuncu: OyuncuId; readonly tip: 'atma'; readonly tas: Tas }
+  /** Oyuncudan YERDEKI BIR PERE: isleme (§6). */
+  | {
+      readonly oyuncu: OyuncuId;
+      readonly tip: 'isleme';
+      readonly perId: number;
+      readonly taslar: readonly Tas[];
+    }
+  /**
+   * Oyuncudan YENI bir pere: acma (§6) ya da fazladan per indirme.
+   *
+   * `isleme`den ayri tutuluyor cunku hedef per O ANDA yaratiliyor. Ekranda
+   * ikisi ayni sekilde ucuyor; ayrim, "bu per zaten duruyor muydu" sorusunun
+   * cevabini kaybetmemek icin.
+   */
+  | {
+      readonly oyuncu: OyuncuId;
+      readonly tip: 'indirme';
+      readonly perId: number;
+      readonly taslar: readonly Tas[];
+    };
+
+/**
+ * Sira numarasi verilmis hareket.
+ *
+ * Kesisim birlesim uzerinde DAGILIYOR, yani ayrimci alan (`tip`) korunuyor;
+ * `Omit`in yapamadigi buydu.
+ */
+export type TasHareketi = TasHareketiGovdesi & {
+  /** Artan sira numarasi. Istemci "bunu gordum mu"yu buna bakarak biliyor. */
+  readonly sira: number;
+};
 
 export interface ElParametreleri {
   readonly tur: TurNo;
@@ -157,6 +253,8 @@ export function elBaslat(
     islerTasSayisi: oyuncuKaydiOlustur(() => 0),
     pencere: null,
     sonCalan: null,
+    sonHareketler: [],
+    sonHareketNo: 0,
     sonuc: null,
   };
 }

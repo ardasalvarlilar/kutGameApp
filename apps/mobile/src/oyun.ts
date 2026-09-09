@@ -16,6 +16,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  OYUNCULAR,
   elBaslat,
   macKazanani,
   oyuncuKaydiOlustur,
@@ -30,8 +31,8 @@ import {
   type OyunDurumu,
   type TurNo,
 } from '@kut/engine';
-import { botAksiyonu } from '@kut/politika';
-import { hataMetni } from './hataMetinleri';
+import { botAksiyonu, botTalebi } from '@kut/politika';
+import { useCeviri, type MetinAnahtari } from './dil';
 import type { MasaSurucusu } from './surucu';
 import {
   kademeDusur,
@@ -68,12 +69,17 @@ export interface OyunArayuzu extends MasaSurucusu {
   readonly oynananEl: number;
 }
 
-/** Cevrimdisi masada karsindakilerin adi. Cevrimicide gercek adlar gelir. */
-const YEREL_ADLAR: Record<OyuncuId, string> = {
-  0: 'SEN',
-  1: 'SOL',
-  2: 'KARŞI',
-  3: 'SAĞ',
+/**
+ * Cevrimdisi masada karsindakilerin adi. Cevrimicide gercek adlar gelir.
+ *
+ * Yon adlari cevriliyor; hesabi olmayan yer tutuculara "Bot Ada" gibi bir ad
+ * uydurmak yerine oturduklari yeri soylemek daha anlasilir.
+ */
+const YEREL_AD_ANAHTARLARI: Record<OyuncuId, MetinAnahtari> = {
+  0: 'oyuncu.sen',
+  1: 'oyuncu.sol',
+  2: 'oyuncu.karsi',
+  3: 'oyuncu.sag',
 };
 
 /** Tur sonu tablosunun ekranda kalma suresi (sn) — okunacak kadar. */
@@ -94,6 +100,31 @@ const BOT_BEKLEMESI_MS = 700;
 const BOT_CALMA_PAYI_MS = 2600;
 
 /**
+ * Yer tutucunun "ISTIYORUM" demeden once bekledigi sure — INSAN calabilirken.
+ *
+ * BOT_CALMA_PAYI_MS'ten kisa: sirasi gelen yer tutucu pencereyi 2600 ms'de
+ * kapatiyor, talep ondan once girmezse hic girmez. Sifir degil, cunku tur
+ * 15'te `CIFT_TALEBI` aninda sonuclaniyor (§9 0.10) ve insanla yaris olabilir.
+ */
+const BOT_TALEP_GECIKMESI_MS = 1600;
+
+/**
+ * Insan calamiyorken talep gecikmesi (ms).
+ *
+ * Ayri deger sart: insan atan ya da sirasi gelen ise yer tutucu pencereyi
+ * BOT_BEKLEMESI_MS'te (700 ms) kapatiyor. Tek bir 1600 ms'lik gecikme,
+ * INSANIN ATTIGI taslar icin talebi fiilen imkansiz kilardi. Beklemenin
+ * karsiligi da yok: tepki verecek insan zaten yok.
+ */
+const BOT_HIZLI_TALEP_MS = 350;
+
+/** Pencere acikken "ISTIYORUM" diyebilecek bir insan var mi (§5)? */
+function insanCalabilirMi(durum: OyunDurumu): boolean {
+  const pencere = durum.pencere;
+  return pencere !== null && pencere.atan !== INSAN && durum.siradaki !== INSAN;
+}
+
+/**
  * Sirasi gelen yer tutucu ne kadar bekleyecek?
  *
  * Cekme fazinda ve masada insanin calabilecegi bir tas varsa daha uzun:
@@ -101,16 +132,14 @@ const BOT_CALMA_PAYI_MS = 2600;
  */
 function botBeklemesi(durum: OyunDurumu): number {
   if (durum.faz !== 'cekme') return 800;
-  const pencere = durum.pencere;
-  const insanCalabilir =
-    pencere !== null && pencere.atan !== INSAN && durum.siradaki !== INSAN;
-  return insanCalabilir ? BOT_CALMA_PAYI_MS : BOT_BEKLEMESI_MS;
+  return insanCalabilirMi(durum) ? BOT_CALMA_PAYI_MS : BOT_BEKLEMESI_MS;
 }
 
 export function useOyun(baslangicTuru: TurNo = 1): OyunArayuzu {
   const [durum, setDurum] = useState<OyunDurumu>(() =>
     elBaslat({ tur: baslangicTuru, baslayan: INSAN, tohum: tohumUret() }),
   );
+  const t = useCeviri();
   const [sonHata, setSonHata] = useState<HataKodu | null>(null);
   const baslayanRef = useRef<OyuncuId>(INSAN);
   // Yeni el, sira degismeden de baslayabilir (insan basliyorsa). Sure sayaci
@@ -134,6 +163,11 @@ export function useOyun(baslangicTuru: TurNo = 1): OyunArayuzu {
   // §9 0.4 — her oyuncunun sure kademesi. Suresini dolduran bir alt kademeye
   // duser ve orada kalir; el degisince sifirlanmaz.
   const [sureKademeleri, setSureKademeleri] = useState<OyuncuKaydi<number>>(kademeleriSifirla);
+
+  const yerelAdlar = useMemo<Record<OyuncuId, string>>(
+    () => oyuncuKaydiOlustur((oyuncu) => t(YEREL_AD_ANAHTARLARI[oyuncu])),
+    [t],
+  );
 
   // React'te setState guncelleyicisi saf olmak zorunda, bu yuzden reduce
   // disarida calisiyor. Ref sayesinde ayni tick icinde art arda gonderilen
@@ -218,6 +252,33 @@ export function useOyun(baslangicTuru: TurNo = 1): OyunArayuzu {
 
     return () => clearTimeout(zamanlayici);
   }, [durum, gonder, botTetik]);
+
+  // --- Yer tutucularin calma karari ----------------------------------------
+  // KURALLAR.md §5: calma sira BASKASINDAYKEN yapilan bir hamle, bu yuzden
+  // yukaridaki "sirasi gelen oynar" effect'i onu kapsamiyor. Karar
+  // @kut/politika'da (`botTalebi`) — sunucudaki botlarla AYNI kod.
+  useEffect(() => {
+    if (durum.faz === 'el-bitti') return;
+    if (durum.pencere === null) return;
+
+    const zamanlayici = setTimeout(() => {
+      for (const koltuk of OYUNCULAR) {
+        if (koltuk === INSAN) continue;
+
+        const mevcut = durumRef.current;
+        // `CIFT_TALEBI` tasi aninda alip pencereyi kapatiyor (§9 0.10);
+        // sonraki koltuklar icin ortada pencere kalmaz.
+        if (mevcut.faz === 'el-bitti' || mevcut.pencere === null) break;
+
+        const aksiyon = botTalebi(viewFor(mevcut, koltuk), koltuk, Date.now());
+        // Reddedilecek talep hic gonderilmiyor; `botTalebi` uygun olmayan
+        // koltuk icin null donuyor.
+        if (aksiyon !== null) gonder(aksiyon);
+      }
+    }, insanCalabilirMi(durum) ? BOT_TALEP_GECIKMESI_MS : BOT_HIZLI_TALEP_MS);
+
+    return () => clearTimeout(zamanlayici);
+  }, [durum, gonder]);
 
   // --- Sira suresi ---------------------------------------------------------
   // Insan sure hakki icinde tasini atmazsa yerine oynanir.
@@ -305,7 +366,8 @@ export function useOyun(baslangicTuru: TurNo = 1): OyunArayuzu {
     durum,
     // Surucu sozlesmesi HAZIR METIN istiyor: cevrimici surucude hata kodu
     // sunucudan geliyor ve ekran ikisini ayirt etmek zorunda kalmasin.
-    sonHata: hataMetni(sonHata),
+    // Kod olarak tasiniyor; cumleye ekran ceviriyor (hataMetinleri.ts).
+    sonHata,
     gonder,
     suAnkiDurum,
     yeniEl,
@@ -317,7 +379,7 @@ export function useOyun(baslangicTuru: TurNo = 1): OyunArayuzu {
     oynananEl,
     macKazananlari,
     turArasiSn: TUR_ARASI_SN,
-    adlar: YEREL_ADLAR,
+    adlar: yerelAdlar,
     // Motor bu cihazda kosuyor; kopacak bir baglanti yok.
     bagli: true,
     cevrimici: false,
