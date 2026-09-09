@@ -260,7 +260,15 @@ const stil = StyleSheet.create({
   govde: { flex: 1, flexDirection: 'row', padding: 16, gap: 24, alignItems: 'center' },
 
   sol: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
-  oyunAdi: { color: renkler.vurgu, fontSize: 56, fontWeight: '900', letterSpacing: 8 },
+  oyunAdi: {
+    color: renkler.vurgu,
+    fontSize: 56,
+    fontWeight: '900',
+    letterSpacing: 8,
+    textShadowColor: 'rgba(0,0,0,0.35)',
+    textShadowOffset: { width: 0, height: 3 },
+    textShadowRadius: 8,
+  },
   altBaslik: { color: renkler.metinSolgun, fontSize: 12, letterSpacing: 0.5 },
   misafirKutu: { width: 260, gap: 6, marginTop: 10 },
   ipucu: { color: renkler.metinSolgun, fontSize: 10, textAlign: 'center' },

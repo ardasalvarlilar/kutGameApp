@@ -38,3 +38,34 @@ export const tasRenkleri: Record<Renk, string> = {
 };
 
 export const okeyRengi = '#7b1fa2';
+
+/**
+ * Paylaşılan gölge/derinlik ölçekleri.
+ *
+ * RN'de `boxShadow` yok; iOS `shadow*`, Android `elevation` okuyor — ikisini
+ * birden vermek gerekiyor. Üç kademe: kart (hafif kabartma), yükseltilmiş
+ * (modal/vurgu düğmesi), masa (en derin — oyunun kendisi).
+ */
+export const golge = {
+  kart: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.22,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  yukseltilmis: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  masa: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+} as const;

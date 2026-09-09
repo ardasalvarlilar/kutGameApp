@@ -36,7 +36,7 @@ import { Avatar } from './Avatar';
 import { useKimlik } from '../ag/kimlik';
 import { DILLER, DIL_ADLARI, useCeviri, useDil, type MetinAnahtari } from '../dil';
 import { YASAL } from '../ag/yasal';
-import { renkler } from '../tema';
+import { golge, renkler } from '../tema';
 
 type Sekme = 'profil' | 'arkadaslar' | 'ayarlar';
 
@@ -378,7 +378,7 @@ const stil = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'transparent',
   },
-  raySekmesiAcik: { backgroundColor: renkler.panel, borderColor: renkler.kenar },
+  raySekmesiAcik: { backgroundColor: renkler.panel, borderColor: renkler.kenar, ...golge.kart },
   basili: { opacity: 0.7 },
   rayYazi: { flex: 1, color: renkler.metinSolgun, fontSize: 11, fontWeight: '800', letterSpacing: 1 },
   rayYaziAcik: { color: renkler.vurgu },
@@ -407,9 +407,10 @@ const stil = StyleSheet.create({
     backgroundColor: renkler.panelKoyu,
     borderWidth: 1,
     borderColor: renkler.kenar,
-    borderRadius: 10,
-    paddingVertical: 10,
+    borderRadius: 12,
+    paddingVertical: 12,
     gap: 2,
+    ...golge.kart,
   },
   kutucukDeger: { color: renkler.metin, fontSize: 20, fontWeight: '900' },
   kutucukEtiket: { color: renkler.metinSolgun, fontSize: 8, fontWeight: '800', letterSpacing: 0.6 },
@@ -467,8 +468,9 @@ const stil = StyleSheet.create({
     backgroundColor: renkler.panelKoyu,
     borderWidth: 1,
     borderColor: renkler.uyari,
-    borderRadius: 10,
-    padding: 16,
+    borderRadius: 14,
+    padding: 18,
+    ...golge.yukseltilmis,
   },
   onayBaslik: { color: renkler.uyari, fontSize: 15, fontWeight: '900', letterSpacing: 0.8 },
   onayMetin: { color: renkler.metin, fontSize: 12, lineHeight: 17 },

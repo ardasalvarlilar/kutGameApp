@@ -33,10 +33,10 @@ import { AnaDugme, Hata } from './Alan';
 import { Avatar } from './Avatar';
 import { useCeviri } from '../dil';
 import type { KoltukGorunumu, MasaGorunumu } from '../ag/protokol';
-import { renkler } from '../tema';
+import { SABIT_REFERANS, masaKonumlari, type Konum } from '../masaDuzeni';
+import { golge, renkler } from '../tema';
 
 const KAPASITE = 4;
-const KOLTUKLAR: readonly OyuncuId[] = [0, 1, 2, 3];
 
 export interface BeklemeOzellikleri {
   readonly masa: MasaGorunumu;
@@ -59,6 +59,7 @@ type KoltukHali = 'bos' | 'benim' | 'baskasi' | 'bot';
 
 function KoltukKarti({
   no,
+  konum,
   koltuk,
   hal,
   bekleyenTalep,
@@ -68,6 +69,7 @@ function KoltukKarti({
   onBotuCikar,
 }: {
   readonly no: OyuncuId;
+  readonly konum: Konum;
   readonly koltuk: KoltukGorunumu | undefined;
   readonly hal: KoltukHali;
   /** Bu koltuk icin BENIM bekleyen talebim var mi? */
@@ -81,30 +83,45 @@ function KoltukKarti({
   const dokunulabilir = !mesgul && (hal === 'bos' || hal === 'baskasi');
 
   return (
-    <Pressable
-      onPress={dokunulabilir ? onBas : undefined}
-      style={({ pressed }) => [
-        stil.koltuk,
-        hal === 'bos' && stil.koltukBos,
-        hal === 'benim' && stil.koltukBenim,
-        pressed && dokunulabilir && stil.basili,
-      ]}
-    >
-      <Text style={stil.koltukNo}>{no + 1}</Text>
-
-      {koltuk === undefined ? (
-        <View style={stil.koltukBilgi}>
-          <Text style={stil.bosYazi}>{t('bekleme.bosKoltuk')}</Text>
-          <Text style={stil.ipucu}>{mesgul ? '…' : t('bekleme.dokunOtur')}</Text>
+    <View style={[stil.konumlayici, stil[konum]]}>
+      <Pressable
+        onPress={dokunulabilir ? onBas : undefined}
+        style={({ pressed }) => [
+          stil.koltuk,
+          hal === 'bos' && stil.koltukBos,
+          hal === 'benim' && stil.koltukBenim,
+          pressed && dokunulabilir && stil.basili,
+        ]}
+      >
+        <View style={stil.koltukUst}>
+          <Text style={stil.koltukNo}>{no + 1}</Text>
+          {/* Plan sabit oldugu icin kendi kartim her yerde olabilir; altin
+              kenarlik tek basina yeterince bagirmiyordu. */}
+          {hal === 'benim' ? (
+            <View style={stil.senRozeti}>
+              <Text style={stil.senYazi}>{t('bekleme.sen')}</Text>
+            </View>
+          ) : null}
+          {hal === 'bot' && sahipMiyim ? (
+            <Pressable onPress={mesgul ? undefined : onBotuCikar} hitSlop={8} style={stil.cikarDugme}>
+              <Text style={stil.cikarYazi}>✕</Text>
+            </Pressable>
+          ) : null}
         </View>
-      ) : (
-        <>
-          <Avatar ad={koltuk.ad} boy={28} />
-          <View style={stil.koltukBilgi}>
+
+        {koltuk === undefined ? (
+          <>
+            <View style={stil.bosCember} />
+            <Text style={stil.bosYazi}>{t('bekleme.bosKoltuk')}</Text>
+            <Text style={stil.ipucu}>{mesgul ? '…' : t('bekleme.dokunOtur')}</Text>
+          </>
+        ) : (
+          <>
+            <Avatar ad={koltuk.ad} boy={30} />
             <Text style={[stil.koltukAd, hal === 'benim' && stil.koltukBen]} numberOfLines={1}>
               {koltuk.ad}
             </Text>
-            <Text style={stil.ipucu}>
+            <Text style={[stil.ipucu, bekleyenTalep && stil.ipucuVurgu]} numberOfLines={1}>
               {hal === 'bot'
                 ? t('bekleme.sunucuOynuyor')
                 : bekleyenTalep
@@ -115,22 +132,17 @@ function KoltukKarti({
                       ? t(koltuk.hazir ? 'bekleme.hazir' : 'bekleme.hazirDegil')
                       : t('bekleme.baglantiKoptu')}
             </Text>
-          </View>
-        </>
-      )}
-
-      {hal === 'bot' && sahipMiyim ? (
-        <Pressable onPress={mesgul ? undefined : onBotuCikar} style={stil.kucukDugme} hitSlop={6}>
-          <Text style={stil.kucukYazi}>{t('bekleme.cikar')}</Text>
-        </Pressable>
-      ) : koltuk !== undefined && hal !== 'bot' ? (
-        <View style={[stil.rozet, koltuk.hazir ? stil.rozetHazir : stil.rozetBekler]}>
-          <Text style={[stil.rozetYazi, koltuk.hazir && stil.rozetYaziHazir]}>
-            {t(koltuk.hazir ? 'bekleme.rozetHazir' : 'bekleme.rozetBekliyor')}
-          </Text>
-        </View>
-      ) : null}
-    </Pressable>
+            {hal !== 'bot' ? (
+              <View style={[stil.rozet, koltuk.hazir ? stil.rozetHazir : stil.rozetBekler]}>
+                <Text style={[stil.rozetYazi, koltuk.hazir && stil.rozetYaziHazir]}>
+                  {t(koltuk.hazir ? 'bekleme.rozetHazir' : 'bekleme.rozetBekliyor')}
+                </Text>
+              </View>
+            ) : null}
+          </>
+        )}
+      </Pressable>
+    </View>
   );
 }
 
@@ -209,34 +221,60 @@ export function Bekleme({
       </View>
 
       <ScrollView contentContainerStyle={stil.sag}>
-        <Text style={stil.etiket}>{t('bekleme.koltuklar')}</Text>
         <Text style={stil.koltukIpucu}>{t('bekleme.koltukIpucu')}</Text>
 
-        <View style={stil.koltuklar}>
-          {KOLTUKLAR.map((no) => {
-            const koltuk = masa.koltuklar.find((k) => k.no === no);
-            const hal: KoltukHali =
-              koltuk === undefined
-                ? 'bos'
-                : koltuk.bot
-                  ? 'bot'
-                  : koltuk.oyuncuId === benimId
-                    ? 'benim'
-                    : 'baskasi';
-            return (
-              <KoltukKarti
-                key={no}
-                no={no}
-                koltuk={koltuk}
-                hal={hal}
-                bekleyenTalep={benimTalebim?.hedefKoltuk === no}
-                mesgul={mesgul}
-                sahipMiyim={sahipMiyim}
-                onBas={() => koltugaBas(no, koltuk)}
-                onBotuCikar={() => onBotuCikar(no)}
-              />
-            );
-          })}
+        {/* Koltuk secimi SABIT bir masa plani: 1 numarali koltuk her zaman
+            altta, herkes ayni plani gorur.
+
+            Once "benim koltugum hep altta" diye ciziliyordu ve masa oyuncuyla
+            BIRLIKTE dondugu icin baska koltuga gecmek ekranda hic
+            degismiyordu: sunucuda koltuk degisiyor, oyuncu yerinde duruyor
+            saniyordu. Plan sabit olunca kendi kartinin tasindigi goruluyor —
+            ve "ustteki koltuga gec" demek de mumkun oluyor.
+
+            Oyun baslayinca yerlesim yine oyuncuya doner (Masa.tsx): orada
+            herkes kendini altta, sagindakini sagda gorur. */}
+        <View style={stil.masaAlani}>
+          <View style={stil.kece}>
+            <Text style={stil.keceYazi}>KÜT</Text>
+          </View>
+
+          {/* Sira yonu: guney → dogu → kuzey → bati. `masaKonumlari` konumlari
+              `siradaIleri` ile kurdugu icin bu yon planla birlikte hep dogru
+              kalir. Sabit planda "sagimdaki" artik ekranin sagi olmadigindan
+              yonu gostermek gerekiyor. */}
+          <Text style={[stil.yonOku, stil.yonSagAlt]}>▲</Text>
+          <Text style={[stil.yonOku, stil.yonSagUst]}>▲</Text>
+          <Text style={[stil.yonOku, stil.yonSolUst]}>▲</Text>
+          <Text style={[stil.yonOku, stil.yonSolAlt]}>▲</Text>
+
+          {(Object.entries(masaKonumlari(SABIT_REFERANS)) as [Konum, OyuncuId][]).map(
+            ([konum, no]) => {
+              const koltuk = masa.koltuklar.find((k) => k.no === no);
+              const hal: KoltukHali =
+                koltuk === undefined
+                  ? 'bos'
+                  : koltuk.bot
+                    ? 'bot'
+                    : koltuk.oyuncuId === benimId
+                      ? 'benim'
+                      : 'baskasi';
+              return (
+                <KoltukKarti
+                  key={no}
+                  no={no}
+                  konum={konum}
+                  koltuk={koltuk}
+                  hal={hal}
+                  bekleyenTalep={benimTalebim?.hedefKoltuk === no}
+                  mesgul={mesgul}
+                  sahipMiyim={sahipMiyim}
+                  onBas={() => koltugaBas(no, koltuk)}
+                  onBotuCikar={() => onBotuCikar(no)}
+                />
+              );
+            },
+          )}
         </View>
 
         {/* Gelen talepler: koltugumu isteyen biri var. Onaylarsam yer
@@ -299,37 +337,127 @@ const stil = StyleSheet.create({
     backgroundColor: renkler.panelKoyu,
     borderWidth: 1,
     borderColor: renkler.kenar,
-    borderRadius: 10,
-    padding: 10,
+    borderRadius: 12,
+    padding: 11,
+    ...golge.kart,
   },
   botBaslik: { color: renkler.vurgu, fontSize: 9, fontWeight: '900', letterSpacing: 1 },
   botMetin: { color: renkler.metinSolgun, fontSize: 10, lineHeight: 14 },
 
-  sag: { width: 320, gap: 6, paddingBottom: 12 },
-  koltukIpucu: { color: renkler.metinSolgun, fontSize: 10, lineHeight: 14, marginBottom: 2 },
-  koltuklar: { gap: 5 },
-  koltuk: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: renkler.panel,
-    borderWidth: 1,
-    borderColor: renkler.kenar,
-    borderRadius: 9,
-    paddingHorizontal: 9,
-    paddingVertical: 6,
+  sag: { width: 390, gap: 6, paddingBottom: 10, alignItems: 'center' },
+  koltukIpucu: {
+    color: renkler.metinSolgun,
+    fontSize: 10,
+    lineHeight: 14,
+    textAlign: 'center',
+    maxWidth: 340,
   },
-  koltukBos: { borderStyle: 'dashed', backgroundColor: 'transparent' },
-  koltukBenim: { borderColor: renkler.vurgu },
-  basili: { opacity: 0.7 },
-  koltukNo: { color: renkler.metinSolgun, fontSize: 11, fontWeight: '900', width: 12 },
-  koltukBilgi: { flex: 1 },
-  koltukAd: { color: renkler.metin, fontSize: 13, fontWeight: '700' },
-  koltukBen: { color: renkler.vurgu },
-  bosYazi: { color: renkler.metinSolgun, fontSize: 13, fontWeight: '700', fontStyle: 'italic' },
-  ipucu: { color: renkler.metinSolgun, fontSize: 9 },
 
-  rozet: { borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  // --- Masa gorunumu -----------------------------------------------------
+  // Konteynerin ortasinda kece, dort kosede koltuk karti — oyunun kendi
+  // masa duzeniyle (Masa.tsx) ayni yerlesim mantigi.
+  masaAlani: { width: 390, height: 300, marginVertical: 2 },
+  kece: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    marginTop: -38,
+    marginLeft: -85,
+    width: 170,
+    height: 76,
+    borderRadius: 20,
+    backgroundColor: renkler.masa,
+    borderWidth: 2,
+    borderColor: renkler.masaCizgi,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...golge.masa,
+  },
+  keceYazi: { color: renkler.masaCizgi, fontSize: 20, fontWeight: '900', letterSpacing: 4 },
+
+  // Sira yonu okları: koltuk kartlarinin arasindaki bos kosegen alanlarda.
+  // "▲" yukari bakiyor; her ok bir sonraki koltuga donduruluyor.
+  yonOku: {
+    position: 'absolute',
+    color: renkler.metinSolgun,
+    fontSize: 13,
+    opacity: 0.5,
+  },
+  yonSagAlt: { left: 264, top: 236, transform: [{ rotate: '45deg' }] },
+  yonSagUst: { left: 264, top: 48, transform: [{ rotate: '-45deg' }] },
+  yonSolUst: { left: 118, top: 48, transform: [{ rotate: '-135deg' }] },
+  yonSolAlt: { left: 118, top: 236, transform: [{ rotate: '135deg' }] },
+
+  konumlayici: { position: 'absolute', width: 100, alignItems: 'center' },
+  guney: { bottom: 0, left: '50%', marginLeft: -50 },
+  kuzey: { top: 0, left: '50%', marginLeft: -50 },
+  dogu: { right: 0, top: '50%', marginTop: -52 },
+  bati: { left: 0, top: '50%', marginTop: -52 },
+
+  koltuk: {
+    width: 100,
+    height: 104,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+    backgroundColor: renkler.panel,
+    borderWidth: 1.5,
+    borderColor: renkler.kenar,
+    borderRadius: 13,
+    paddingHorizontal: 5,
+    paddingVertical: 6,
+    ...golge.kart,
+  },
+  koltukBos: { borderStyle: 'dashed', backgroundColor: renkler.panelKoyu },
+  koltukBenim: { borderColor: renkler.vurgu, borderWidth: 2, ...golge.yukseltilmis },
+  basili: { transform: [{ scale: 0.96 }], opacity: 0.88 },
+
+  koltukUst: {
+    flexDirection: 'row',
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  koltukNo: { color: renkler.metinSolgun, fontSize: 10, fontWeight: '900' },
+  senRozeti: {
+    backgroundColor: renkler.vurgu,
+    borderRadius: 5,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  senYazi: { color: '#2a2000', fontSize: 8, fontWeight: '900', letterSpacing: 0.6 },
+  cikarDugme: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: renkler.panelKoyu,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cikarYazi: { color: renkler.uyari, fontSize: 9, fontWeight: '900' },
+
+  bosCember: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 1.5,
+    borderColor: renkler.kenar,
+    borderStyle: 'dashed',
+  },
+  bosYazi: {
+    color: renkler.metinSolgun,
+    fontSize: 11,
+    fontWeight: '700',
+    fontStyle: 'italic',
+    marginTop: 1,
+  },
+  ipucu: { color: renkler.metinSolgun, fontSize: 8, textAlign: 'center' },
+  ipucuVurgu: { color: renkler.vurgu, fontWeight: '800' },
+
+  koltukAd: { color: renkler.metin, fontSize: 12, fontWeight: '800', marginTop: 1 },
+  koltukBen: { color: renkler.vurgu },
+
+  rozet: { borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, marginTop: 1 },
   rozetHazir: { backgroundColor: renkler.onay },
   rozetBekler: { backgroundColor: 'transparent' },
   rozetYazi: { color: renkler.metinSolgun, fontSize: 8, fontWeight: '900', letterSpacing: 0.8 },
@@ -348,17 +476,18 @@ const stil = StyleSheet.create({
   kucukYaziVurgu: { color: '#2a2000' },
 
   talep: {
-    marginTop: 6,
+    width: 340,
     gap: 6,
     backgroundColor: renkler.panelKoyu,
     borderWidth: 1,
     borderColor: renkler.vurgu,
     borderRadius: 9,
     padding: 9,
+    ...golge.kart,
   },
   talepMetin: { color: renkler.metin, fontSize: 11, lineHeight: 15 },
   talepDugmeler: { flexDirection: 'row', gap: 6 },
 
-  dugmeler: { flexDirection: 'row', gap: 6, marginTop: 8 },
+  dugmeler: { flexDirection: 'row', gap: 6, marginTop: 4, width: 340 },
   dugme: { flex: 1 },
 });

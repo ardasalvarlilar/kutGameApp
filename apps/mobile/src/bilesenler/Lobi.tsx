@@ -55,7 +55,7 @@ import { Avatar } from './Avatar';
 import { useCeviri } from '../dil';
 import type { ArkadasDurumu } from '../ag/api';
 import type { OyuncuOzeti } from '../ag/protokol';
-import { renkler } from '../tema';
+import { golge, renkler } from '../tema';
 
 export interface LobiOzellikleri {
   readonly oyuncu: OyuncuOzeti | null;
@@ -314,7 +314,15 @@ const stil = StyleSheet.create({
   // --- Sol sutun: kimlik ------------------------------------------------------
   sol: { flex: 1, gap: 10, maxWidth: 360 },
   marka: { alignItems: 'center', gap: 2 },
-  oyunAdi: { color: renkler.vurgu, fontSize: 46, fontWeight: '900', letterSpacing: 8 },
+  oyunAdi: {
+    color: renkler.vurgu,
+    fontSize: 46,
+    fontWeight: '900',
+    letterSpacing: 8,
+    textShadowColor: 'rgba(0,0,0,0.35)',
+    textShadowOffset: { width: 0, height: 3 },
+    textShadowRadius: 8,
+  },
   altBaslik: { color: renkler.metinSolgun, fontSize: 11, letterSpacing: 0.5 },
 
   profilKarti: {
@@ -324,9 +332,10 @@ const stil = StyleSheet.create({
     backgroundColor: renkler.panelKoyu,
     borderWidth: 1,
     borderColor: renkler.kenar,
-    borderRadius: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    ...golge.kart,
   },
   profilBilgi: { flex: 1, gap: 1 },
   profilOk: { color: renkler.metinSolgun, fontSize: 22, marginTop: -2 },
@@ -340,8 +349,9 @@ const stil = StyleSheet.create({
     backgroundColor: renkler.panelKoyu,
     borderWidth: 1,
     borderColor: renkler.kenar,
-    borderRadius: 12,
-    padding: 10,
+    borderRadius: 14,
+    padding: 11,
+    ...golge.kart,
   },
   arkadasBaslikSatiri: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   bolumBaslik: {
@@ -383,13 +393,19 @@ const stil = StyleSheet.create({
     backgroundColor: renkler.panel,
     borderWidth: 1,
     borderColor: renkler.kenar,
-    borderRadius: 11,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    borderRadius: 13,
+    paddingVertical: 11,
+    paddingHorizontal: 13,
     gap: 2,
+    ...golge.kart,
   },
-  eylemBuyuk: { backgroundColor: renkler.vurgu, borderColor: renkler.vurgu, paddingVertical: 14 },
-  eylemBasili: { opacity: 0.75 },
+  eylemBuyuk: {
+    backgroundColor: renkler.vurgu,
+    borderColor: renkler.vurgu,
+    paddingVertical: 16,
+    ...golge.yukseltilmis,
+  },
+  eylemBasili: { opacity: 0.8, transform: [{ scale: 0.98 }] },
   pasif: { opacity: 0.4 },
   eylemEtiket: { color: renkler.metin, fontSize: 13, fontWeight: '800', letterSpacing: 0.6 },
   eylemEtiketBuyuk: { color: '#2a2000', fontSize: 19, fontWeight: '900', letterSpacing: 1.2 },

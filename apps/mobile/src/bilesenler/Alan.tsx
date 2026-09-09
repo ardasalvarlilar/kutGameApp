@@ -3,6 +3,7 @@
 // Ayri dosya cunku giris ekrani, lobi ve bekleme odasi ayni gorunumu
 // paylasiyor; her birinde yeniden yazmak uc ayri stil demek olurdu.
 
+import { useState } from 'react';
 import {
   ActivityIndicator,
   Linking,
@@ -13,20 +14,31 @@ import {
   View,
 } from 'react-native';
 import type { ComponentProps } from 'react';
-import { renkler } from '../tema';
+import { golge, renkler } from '../tema';
 
 interface AlanOzellikleri extends Omit<ComponentProps<typeof TextInput>, 'style'> {
   readonly etiket: string;
 }
 
 export function Alan({ etiket, ...kalan }: AlanOzellikleri) {
+  // Odaklaninca kenarlik vurgu rengine doner — dokunulan alanin hangisi
+  // oldugu bir onceki tasarimda yalnizca imlecten anlasiliyordu.
+  const [odakta, setOdakta] = useState(false);
   return (
     <View style={stil.alanKutu}>
       <Text style={stil.etiket}>{etiket}</Text>
       <TextInput
         {...kalan}
-        style={stil.giris}
+        style={[stil.giris, odakta && stil.girisOdakta]}
         placeholderTextColor={renkler.metinSolgun}
+        onFocus={(olay) => {
+          setOdakta(true);
+          kalan.onFocus?.(olay);
+        }}
+        onBlur={(olay) => {
+          setOdakta(false);
+          kalan.onBlur?.(olay);
+        }}
         // Turkce klavyede otomatik buyuk harf e-postayi bozuyor; her alanda
         // bilerek kapali, gerekirse cagiran acar.
         autoCapitalize={kalan.autoCapitalize ?? 'none'}
@@ -55,12 +67,13 @@ export function AnaDugme({
   return (
     <Pressable
       onPress={basilabilir ? onBas : undefined}
-      style={[
+      style={({ pressed }) => [
         stil.dugme,
         tur === 'vurgu' && stil.dugmeVurgu,
         tur === 'cizgi' && stil.dugmeCizgi,
         tur === 'tehlike' && stil.dugmeTehlike,
         !basilabilir && stil.dugmePasif,
+        pressed && basilabilir && stil.dugmeBasili,
       ]}
     >
       {bekliyor ? (
@@ -126,32 +139,35 @@ const stil = StyleSheet.create({
   },
   giris: {
     backgroundColor: renkler.arkaKoyu,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: renkler.kenar,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     color: renkler.metin,
     fontSize: 14,
   },
+  girisOdakta: { borderColor: renkler.vurgu },
 
   dugme: {
-    borderRadius: 9,
+    borderRadius: 10,
     paddingHorizontal: 14,
-    paddingVertical: 11,
+    paddingVertical: 12,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: renkler.panel,
     borderWidth: 1,
     borderColor: renkler.kenar,
-    minHeight: 40,
+    minHeight: 44,
   },
-  dugmeVurgu: { backgroundColor: renkler.vurgu, borderColor: renkler.vurgu },
+  dugmeVurgu: { backgroundColor: renkler.vurgu, borderColor: renkler.vurgu, ...golge.kart },
   dugmeCizgi: { backgroundColor: 'transparent' },
   // Geri donusu olmayan islemler (hesap silme) ayri renkte: yanlislikla
   // basilan bir dugmenin diger dugmelere benzemesi kotu bir fikir.
   dugmeTehlike: { backgroundColor: 'transparent', borderColor: renkler.uyari },
   dugmePasif: { opacity: 0.4 },
+  // Basinca hafif kuculme — dokunmanin karsiligini gorsel olarak verir.
+  dugmeBasili: { transform: [{ scale: 0.97 }], opacity: 0.9 },
   dugmeYazi: { color: renkler.metin, fontSize: 13, fontWeight: '800', letterSpacing: 0.6 },
   dugmeYaziVurgu: { color: '#2a2000' },
   dugmeYaziTehlike: { color: renkler.uyari },

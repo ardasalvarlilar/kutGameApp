@@ -23,7 +23,7 @@ import {
 import { AnaDugme, Hata } from './Alan';
 import type { AcikMasaOzeti } from '../ag/protokol';
 import { useCeviri } from '../dil';
-import { renkler } from '../tema';
+import { golge, renkler } from '../tema';
 
 export interface MasaBulOzellikleri {
   readonly masalariGetir: () => Promise<readonly AcikMasaOzeti[]>;
@@ -101,7 +101,11 @@ export function MasaBul({
             <Pressable
               key={masa.kod}
               onPress={mesgul ? undefined : () => onKatil(masa.kod)}
-              style={[stil.satir, mesgul && stil.satirPasif]}
+              style={({ pressed }) => [
+                stil.satir,
+                mesgul && stil.satirPasif,
+                pressed && !mesgul && stil.satirBasili,
+              ]}
             >
               <View style={stil.satirSol}>
                 <Text style={stil.oyuncular} numberOfLines={1}>
@@ -157,11 +161,13 @@ const stil = StyleSheet.create({
     backgroundColor: renkler.panel,
     borderColor: renkler.kenar,
     borderWidth: 1,
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+    borderRadius: 13,
+    paddingVertical: 12,
+    paddingHorizontal: 15,
+    ...golge.kart,
   },
   satirPasif: { opacity: 0.5 },
+  satirBasili: { transform: [{ scale: 0.985 }], opacity: 0.9 },
   satirSol: { flex: 1, gap: 2 },
   oyuncular: { color: renkler.metin, fontSize: 14, fontWeight: '700' },
   kod: { color: renkler.metinSolgun, fontSize: 10, letterSpacing: 1 },

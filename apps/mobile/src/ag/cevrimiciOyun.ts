@@ -204,14 +204,19 @@ export function useCevrimiciMasa(soket: Socket | null, bagli: boolean): Cevrimic
       }
       setMesgul(true);
       setHata(null);
-      const sonuc = await sor<{ masa?: MasaGorunumu }>(soket, olay, girdi);
+      // `veri` NULL olabiliyor: sunucu masa dondurmeyen olaylarda
+      // `basarili(null)` yolluyor (soket/index.ts — `masa:cik`). Korumasiz
+      // okumak TypeError atiyordu; hata `istek`in disina tasip cagiranin
+      // geri kalanini iptal ediyordu. Gorunen sonucu: MASADAN CIK'a basinca
+      // sunucu masadan cikariyor ama ekran masada kaliyordu.
+      const sonuc = await sor<{ masa?: MasaGorunumu } | null>(soket, olay, girdi);
       setMesgul(false);
 
       if (!sonuc.ok) {
         setHata(sonuc.hata);
         return;
       }
-      if (sonuc.veri.masa !== undefined) setMasa(sonuc.veri.masa);
+      if (sonuc.veri?.masa !== undefined) setMasa(sonuc.veri.masa);
     },
     [soket],
   );
