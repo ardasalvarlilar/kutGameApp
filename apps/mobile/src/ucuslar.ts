@@ -18,8 +18,27 @@
 // burada kararlastirilmiyor: hareketin tasi doluysa acik, null ise kapali.
 // Motor kurali #3 geregi desteden gelen tas zaten null geliyor.
 
-import type { OyuncuId, TasHareketi } from '@kut/engine';
+import type { OyuncuId, TasHareketi, TasId } from '@kut/engine';
 import type { Nokta, Ucus } from './bilesenler/UcanTas';
+
+/**
+ * Su an HAVADA olan taslarin kimlikleri (oynayan + kuyrukta bekleyen).
+ *
+ * Ekran son durumu hemen ciziyor, ucuslar ise kuyrukta sirayla oynuyor. Bir
+ * sirada birden fazla hamle varsa (ac + at) atilan tas, kendi ucusu daha
+ * baslamadan yiginin ustunde beliriyordu: once tas orada bitiyor, sonra acma
+ * animasyonu oynuyor, en sonda tas bir kez daha ucup zaten durdugu yere
+ * konuyordu. Havadaki tasi VARIS YERINDE gizlemek bunu duzeltiyor.
+ *
+ * Kapali ucan taslar (`tas: null`) burada yok: kimlikleri zaten gorunmuyor.
+ */
+export function ucanTasIdleri(ucuslar: readonly Ucus[]): ReadonlySet<TasId> {
+  const idler = new Set<TasId>();
+  for (const ucus of ucuslar) {
+    if (ucus.tas !== null) idler.add(ucus.tas.id);
+  }
+  return idler;
+}
 
 /** Ucusun uclarini veren noktalar — masaya gore, ekrana gore degil. */
 export interface UcusOrtami {

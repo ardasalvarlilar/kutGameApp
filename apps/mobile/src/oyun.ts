@@ -18,6 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   OYUNCULAR,
   elBaslat,
+  elKur,
   macKazanani,
   oyuncuKaydiOlustur,
   reduce,
@@ -29,6 +30,7 @@ import {
   type OyuncuId,
   type OyuncuKaydi,
   type OyunDurumu,
+  type Tas,
   type TurNo,
 } from '@kut/engine';
 import { botAksiyonu, botTalebi } from '@kut/politika';
@@ -135,9 +137,34 @@ function botBeklemesi(durum: OyunDurumu): number {
   return insanCalabilirMi(durum) ? BOT_CALMA_PAYI_MS : BOT_BEKLEMESI_MS;
 }
 
-export function useOyun(baslangicTuru: TurNo = 1): OyunArayuzu {
+/**
+ * Ogretici acikken masanin frenleri.
+ *
+ * Ikisi de SART: ogretici bir adimi anlatirken masa kendi basina ilerlerse
+ * (sure dolar, yerine oynanir; yer tutucular hamlelerini yapar) adimin
+ * anlattigi durum daha kullanici okurken dagiliyor.
+ */
+export interface OgreticiFreni {
+  /** Sira suresi islemesin — kullanici balonu okurken yerine oynanmasin. */
+  readonly sureDur: boolean;
+  /** Yer tutucular beklesin; ogretici siralarini geldiginde birakiyor. */
+  readonly yerTutucularDursun: boolean;
+}
+
+/**
+ * @param kuruluDeste Verilirse ILK el karistirilmadan bu desteyle dagitilir
+ *   (ogretici senaryosu). Sonraki eller yine tohumlu — ogretici yalnizca tur
+ *   1'i kapsiyor, sonrasinda masa normal alistirmaya donuyor.
+ */
+export function useOyun(
+  baslangicTuru: TurNo = 1,
+  kuruluDeste?: readonly Tas[],
+  fren?: OgreticiFreni,
+): OyunArayuzu {
   const [durum, setDurum] = useState<OyunDurumu>(() =>
-    elBaslat({ tur: baslangicTuru, baslayan: INSAN, tohum: tohumUret() }),
+    kuruluDeste === undefined
+      ? elBaslat({ tur: baslangicTuru, baslayan: INSAN, tohum: tohumUret() })
+      : elKur({ tur: baslangicTuru, baslayan: INSAN, deste: kuruluDeste }),
   );
   const t = useCeviri();
   const [sonHata, setSonHata] = useState<HataKodu | null>(null);
@@ -212,9 +239,12 @@ export function useOyun(baslangicTuru: TurNo = 1): OyunArayuzu {
   // --- Yer tutucu oyuncular ------------------------------------------------
   // Kendi `viewFor` projeksiyonlarindan fazlasini gormezler (motor kurali #3).
   // Karar mantigi src/bot.ts'te; burada yalnizca sirayla uygulaniyor.
+  const yerTutucularDursun = fren?.yerTutucularDursun ?? false;
+
   useEffect(() => {
     if (durum.faz === 'el-bitti') return;
     if (durum.siradaki === INSAN) return;
+    if (yerTutucularDursun) return;
 
     const siradaki = durum.siradaki;
     const bekleme = botBeklemesi(durum);
@@ -251,7 +281,7 @@ export function useOyun(baslangicTuru: TurNo = 1): OyunArayuzu {
     }, bekleme);
 
     return () => clearTimeout(zamanlayici);
-  }, [durum, gonder, botTetik]);
+  }, [durum, gonder, botTetik, yerTutucularDursun]);
 
   // --- Yer tutucularin calma karari ----------------------------------------
   // KURALLAR.md §5: calma sira BASKASINDAYKEN yapilan bir hamle, bu yuzden
@@ -260,6 +290,7 @@ export function useOyun(baslangicTuru: TurNo = 1): OyunArayuzu {
   useEffect(() => {
     if (durum.faz === 'el-bitti') return;
     if (durum.pencere === null) return;
+    if (yerTutucularDursun) return;
 
     const zamanlayici = setTimeout(() => {
       for (const koltuk of OYUNCULAR) {
@@ -278,7 +309,7 @@ export function useOyun(baslangicTuru: TurNo = 1): OyunArayuzu {
     }, insanCalabilirMi(durum) ? BOT_TALEP_GECIKMESI_MS : BOT_HIZLI_TALEP_MS);
 
     return () => clearTimeout(zamanlayici);
-  }, [durum, gonder]);
+  }, [durum, gonder, yerTutucularDursun]);
 
   // --- Sira suresi ---------------------------------------------------------
   // Insan sure hakki icinde tasini atmazsa yerine oynanir.
@@ -294,13 +325,16 @@ export function useOyun(baslangicTuru: TurNo = 1): OyunArayuzu {
   const sureler = durum.ayarlar.siraSureleriMs;
   const siraSuresi = kademeSuresi(sureKademeleri[INSAN], sureler);
 
+  const sureDur = fren?.sureDur ?? false;
+
   useEffect(() => {
-    if (elBitti || durum.siradaki !== INSAN) {
+    // Ogretici acikken sayac hic baslamiyor: balonu okumanin suresi olmaz.
+    if (sureDur || elBitti || durum.siradaki !== INSAN) {
       setSiraBitisi(null);
       return;
     }
     setSiraBitisi(Date.now() + siraSuresi);
-  }, [elNo, durum.siradaki, durum.faz, elBitti, siraSuresi]);
+  }, [elNo, durum.siradaki, durum.faz, elBitti, siraSuresi, sureDur]);
 
   useEffect(() => {
     if (siraBitisi === null) return;

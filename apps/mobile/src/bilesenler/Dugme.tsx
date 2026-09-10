@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useHedef, type OgreticiHedefi } from '../ogretici/hedefKaydi';
 import { renkler } from '../tema';
 
 interface Ozellikler {
@@ -7,11 +8,19 @@ interface Ozellikler {
   readonly onBas: () => void;
   readonly tur?: 'normal' | 'vurgu' | 'uyari';
   readonly genis?: boolean;
+  /**
+   * Ogretici bu dugmeye isik tutacaksa adi. Dugmeler yan panelde saran bir
+   * izgarada; sarmalayici View duzeni bozardi, o yuzden kayit ref ile.
+   */
+  readonly hedef?: OgreticiHedefi;
 }
 
-export function Dugme({ etiket, aktif, onBas, tur = 'normal', genis = false }: Ozellikler) {
+export function Dugme({ etiket, aktif, onBas, tur = 'normal', genis = false, hedef }: Ozellikler) {
+  const hedefRef = useHedef(hedef);
   return (
     <Pressable
+      ref={hedefRef}
+      collapsable={false}
       onPress={aktif ? onBas : undefined}
       style={[
         stil.dugme,

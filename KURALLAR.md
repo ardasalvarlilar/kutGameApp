@@ -1,6 +1,6 @@
 # Küt — Kural Spesifikasyonu
 
-> Sürüm 0.10. Kural motoru **yalnızca** bu dokümandan yazılır.
+> Sürüm 0.12. Kural motoru **yalnızca** bu dokümandan yazılır.
 > Burada yazmayan kural oyunda yoktur. Belirsiz bir nokta varsa
 > tahmin etme — "Karara bağlananlar" bölümüne bak, orada da yoksa sor.
 >
@@ -9,8 +9,10 @@
 > alma şartı eklendi. 0.4'te sıra süresi geldi, 0.5'te eli bitiren atış
 > işler taş cezasından muaf tutuldu, 0.6'da okeyin yerine geçen taş işler
 > sayıldı, 0.7'de süre kademesi el sonunda sıfırlandı, 0.8'de yerdeki okeyin
-> yeri sabitlendi, 0.9'da talep penceresinin süresi kaldırıldı, **0.10'da
-> "çifti bende" anında sonuçlanan bir hamleye çevrildi** (bkz. §9).
+> yeri sabitlendi, 0.9'da talep penceresinin süresi kaldırıldı, 0.10'da
+> "çifti bende" anında sonuçlanan bir hamleye çevrildi, 0.11'de okeyle
+> bitirenin puanı -200 oldu, **0.12'de deste tükenince el son taşı çekenin
+> atışıyla kapanır oldu** (bkz. §9).
 
 Küt, halk arasında **Americano** olarak da bilinen oyunun okey taşlarıyla
 oynanan hâlidir. 101'e benzer ama her turun kendi açılış şartı vardır.
@@ -297,6 +299,12 @@ ortaya atmış** oyuncu eli bitirir.
 Destedeki 49 taş biterse el kimse bitirmeden kapanır. Herkes ıstakasında
 kalan sayıları ceza yazar; açamayanlar iki katını yazar.
 Atık yığınları karılıp desteye geri KONMAZ.
+
+- **El, son taşı çeken oyuncunun atışıyla kapanır** (0.12). Destenin son
+  taşını çeken sırasını normal oynar — açabilir, işleyebilir — ve bir taş
+  attığı anda el biter. Sıradaki oyuncu o atılan taşı yerden alamaz.
+- Son taşı çeken, atışıyla elindeki **son taşı** da atıyorsa bu normal
+  bitiştir: eli kazanarak bitirir.
 
 - **Kimse -100 almaz.** El kazanansız kapanır.
 - Çalma cezaları (5 × çalış) yine herkesin puanına eklenir.
@@ -613,6 +621,27 @@ ikisi tek şarta bağlandı.
 Motorda karşılığı: `KAZANAN_OKEYLE_PUANI` sabiti ve `PuanDetayi`de kazanan için
 `okeyleBitmeCarpani` bayrağının anlamı ("çarpan yedi" değil, "-200 aldı").
 
+### 0.12 ile eklenenler (10 Eylül 2026)
+
+| Konu | Karar | Nerede |
+|---|---|---|
+| Deste tükenince el ne zaman kapanır? | **Son taşı çekenin atışıyla** | §7 |
+
+Oyunda fark edildi: destenin son taşını çeken oyuncu taşını atıyor, el ancak
+**sıradaki oyuncu çekmeye kalkınca** bitiyordu. Oyuncu bunu "çekmeye çalıştım,
+oyun bitti" diye görüyordu. Ayrıca sıradaki, çekmek yerine atılan taşı yerden
+alıp eli bir tur daha uzatabiliyordu.
+
+Artık deste boşaldıktan sonraki ilk atış eli kapatır. Son çekilen taş normal
+oynanır (açma, işleme serbest); atış eli bitirmiyorsa `deste-tukendi` ile
+kapanır, bitiriyorsa normal bitiştir. Puanlama değişmedi (§7, §9 #4).
+
+Bu, §10'un 8. maddesindeki eski okumayı ("el, çekilecek taş kalmayınca
+kapanıyor") değiştirdi.
+
+Motorda karşılığı: `at` içinde, eli bitirme kontrolünden hemen sonra deste
+boşsa `elBitir(…, 'deste-tukendi', …)`.
+
 ---
 
 ## 10. Motorun spesifikasyondan türettiği okumalar
@@ -643,6 +672,9 @@ maddelerden türetti. Yanlışlarsa tek yerde düzeltilir — söylemen yeterli.
 7. **İki okeyli kütten okey alınamıyor.** Kütteki okeyi almak dört rengin
    tamamlanmasını gerektirdiği için, içinde iki okey olan bir kütten tek
    okey çekilemiyor — şart hiçbir zaman sağlanamıyor.
-8. **El, çekilecek taş kalmayınca kapanıyor.** Deste boşaldığında değil,
-   bir oyuncunun çekmesi gerektiği hâlde çekecek taş bulunmadığında.
-   Böylece son çekilen taş normal biçimde oynanabiliyor.
+8. ~~**El, çekilecek taş kalmayınca kapanıyor.**~~ 0.12 ile değişti: el,
+   son taşı çekenin **atışıyla** kapanıyor (§7). Son çekilen taş yine normal
+   biçimde oynanabiliyor. Eski yol yalnızca bir kenar durumda yedek olarak
+   duruyor: tur 15'te bir "çifti bende" hamlesi destenin son taşını **ceza**
+   olarak alırsa kimse çekip atmamış olur; sıradaki oyuncu çekemeyeceği için
+   el onun çekme denemesinde kapanıyor.

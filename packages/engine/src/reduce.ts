@@ -420,6 +420,18 @@ function at(durum: OyunDurumu, oyuncu: OyuncuId, tasId: TasId): AksiyonSonucu {
     return hareketlerle(elBitir(araDurum, 'normal', oyuncu, okeyMi(tas)), [atmaHareketi]);
   }
 
+  // §7, §9 0.12 — deste bittiyse el, SON TASI CEKEN oyuncunun bu atisiyla
+  // kapanir. Eskiden el ancak siradaki oyuncu cekmeye kalkinca kapaniyordu:
+  // oyuncu "cekmeye calisinca oyun bitti" goruyordu ve siradaki, bu arada
+  // atilan tasi yerden alip eli uzatabiliyordu.
+  //
+  // Atma fazinda deste bossa son tasi bu sirada biri cekti demektir (siradaki
+  // ya da ceza tasini alan calan — calma sirayi harcamaz, atan yine bu
+  // oyuncu). Eli bitiren atis yukarida, normal bitis olarak onde.
+  if (araDurum.deste.length === 0) {
+    return hareketlerle(elBitir(araDurum, 'deste-tukendi', null, false), [atmaHareketi]);
+  }
+
   return hareketlerle(
     {
       ...araDurum,

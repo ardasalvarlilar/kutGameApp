@@ -13,6 +13,7 @@ import { Platform } from 'react-native';
 const JETON_ANAHTARI = 'kut.jeton';
 const CIHAZ_ANAHTARI = 'kut.cihaz';
 const DIL_ANAHTARI = 'kut.dil';
+const OGRETICI_ANAHTARI = 'kut.ogreticiSoruldu';
 
 const webMi = Platform.OS === 'web';
 
@@ -58,6 +59,17 @@ export const jetonuSil = (): Promise<void> => sil(JETON_ANAHTARI);
  */
 export const diliOku = (): Promise<string | null> => oku(DIL_ANAHTARI);
 export const diliYaz = (dil: string): Promise<void> => yaz(DIL_ANAHTARI, dil);
+
+/**
+ * Ogretici DAHA ONCE SORULDU MU — cihazda, hesapta degil.
+ *
+ * Saklanan sey "ogreticiyi izledi mi" degil "soruldu mu": hayir diyen
+ * oyuncuya her alistirmada tekrar sormak sinir bozucu olurdu. Fikri
+ * degisenin yolu Ayarlar'daki "Ogreticiyi oynat".
+ */
+export const ogreticiSorulduMu = async (): Promise<boolean> =>
+  (await oku(OGRETICI_ANAHTARI)) !== null;
+export const ogreticiSorulduYaz = (): Promise<void> => yaz(OGRETICI_ANAHTARI, 'evet');
 
 /**
  * Cihaz kimligi — misafir hesabinin tek baglantisi.

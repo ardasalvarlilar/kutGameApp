@@ -1,6 +1,6 @@
 import { useMemo, type ComponentRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { perGoruntuSirasi, type OyuncuGorunumu, type OyuncuId } from '@kut/engine';
+import { perGoruntuSirasi, type OyuncuGorunumu, type OyuncuId, type TasId } from '@kut/engine';
 import { PER_ARASI, PER_CERCEVE, PER_TAS_BOSLUK, tasOlcusu } from '../olculer';
 import { renkler } from '../tema';
 import { TasGorseli } from './TasGorseli';
@@ -17,13 +17,30 @@ interface Ozellikler {
   readonly onPer: (perId: number) => void;
   /** Perin ekrandaki yeri — tas suruklenerek buraya islenebiliyor. */
   readonly perRef?: (perId: number, gorunum: ComponentRef<typeof View> | null) => void;
+  /**
+   * Su an HAVADA olan taslar (bkz. `src/ucuslar.ts`).
+   *
+   * Bunlar perde BOS YUVA olarak ciziliyor: tas yuzu, ucusu bitince beliriyor.
+   * Yuva KALIYOR — perin olcusu ve konumu bozulmamali, cunku ucusun hedefi
+   * perin OLCULEN yeri (`measureInWindow`). Peri kucultmek taslari yanlis
+   * noktaya ucururdu.
+   */
+  readonly ucanlar?: ReadonlySet<TasId>;
 }
 
 /**
  * Bir oyuncunun yere indirdigi perler — kendi istakasinin onunde durur.
  * Ortada tek bir yigin yok; herkesin peri kendi tarafinda.
  */
-export function PerAlani({ oyuncu, gorunum, tasEni, dikey = false, onPer, perRef }: Ozellikler) {
+export function PerAlani({
+  oyuncu,
+  gorunum,
+  tasEni,
+  dikey = false,
+  onPer,
+  perRef,
+  ucanlar,
+}: Ozellikler) {
   const olcu = useMemo(() => tasOlcusu(tasEni), [tasEni]);
   const perler = gorunum.yer.filter((per) => per.sahibi === oyuncu);
 
@@ -48,9 +65,19 @@ export function PerAlani({ oyuncu, gorunum, tasEni, dikey = false, onPer, perRef
           {/* Taslar geldigi sirayla degil, serideki YERINE gore dizilir:
               `12 + 13 + okey`de okey 11'in yerindedir, 13'un sagi degil (§2). */}
           <View style={stil.perTaslari}>
-            {perGoruntuSirasi(per).map((tas) => (
-              <TasGorseli key={tas.id} tas={tas} boy={olcu} />
-            ))}
+            {perGoruntuSirasi(per).map((tas) =>
+              ucanlar?.has(tas.id) === true ? (
+                <View
+                  key={tas.id}
+                  style={[
+                    stil.bosYuva,
+                    { width: olcu.en, height: olcu.boy, borderRadius: olcu.yuvarlak },
+                  ]}
+                />
+              ) : (
+                <TasGorseli key={tas.id} tas={tas} boy={olcu} />
+              ),
+            )}
           </View>
         </Pressable>
       ))}
@@ -72,4 +99,13 @@ const stil = StyleSheet.create({
     borderColor: renkler.masaCizgi,
   },
   perTaslari: { flexDirection: 'row', gap: PER_TAS_BOSLUK },
+  // Havadaki tasin yeri: kece uzerinde belli belirsiz bir oyuk. Gorunur
+  // olmasi SART degil ama yer tuttugunu gostermesi iyi — tas inince oraya
+  // oturuyor.
+  bosYuva: {
+    backgroundColor: renkler.masaKoyu,
+    borderWidth: 1,
+    borderColor: renkler.masaCizgi,
+    opacity: 0.5,
+  },
 });

@@ -191,7 +191,83 @@ describe('talep penceresi — KURALLAR.md §5, §9 0.9 (suresiz)', () => {
 });
 
 describe('deste tukenmesi — KURALLAR.md §7', () => {
-  it('cekilecek tas kalmayinca el kimse bitirmeden kapanir', () => {
+  // §9 0.12 — el, son tasi cekenin ATISIYLA kapanir. Eskiden siradaki oyuncu
+  // cekmeye kalkinca kapaniyordu ve o, arada atilan tasi yerden alip eli
+  // uzatabiliyordu.
+  it('destenin son tasini ceken tas atinca el kapanir', () => {
+    const son = t('sari', 4);
+    const durum = durumKur({
+      siradaki: 3,
+      faz: 'cekme',
+      istakalar: {
+        0: [t('mavi', 5)],
+        1: [t('mavi', 6)],
+        2: [t('mavi', 7)],
+        3: [t('mavi', 8), t('mavi', 9)],
+      },
+      deste: [son],
+    });
+    const cekti = durumAl(reduce(durum, { tip: 'CEK_DESTEDEN', oyuncu: 3, suAn: 1 }));
+    expect(cekti.deste).toHaveLength(0);
+    // Son cekilen tas normal oynanir: el henuz bitmedi.
+    expect(cekti.faz).toBe('atma');
+
+    const atti = durumAl(reduce(cekti, { tip: 'AT', oyuncu: 3, tasId: son.id, suAn: 2 }));
+    expect(atti.faz).toBe('el-bitti');
+    expect(atti.sonuc?.bitisTipi).toBe('deste-tukendi');
+    expect(atti.sonuc?.kazanan).toBe(null);
+
+    // Siradaki oyuncu atilan tasi yerden alip eli uzatamaz.
+    const al = reduce(atti, { tip: 'CEK_ATIKTAN', oyuncu: 2, suAn: 3 });
+    expect(al.ok).toBe(false);
+  });
+
+  it('son tasi ceken elindeki son tasi atarsa normal biter ve kazanir', () => {
+    const son = t('sari', 4);
+    const durum = durumKur({
+      siradaki: 3,
+      faz: 'cekme',
+      istakalar: { 0: [t('mavi', 5)], 1: [t('mavi', 6)], 2: [t('mavi', 7)], 3: [] },
+      deste: [son],
+    });
+    const cekti = durumAl(reduce(durum, { tip: 'CEK_DESTEDEN', oyuncu: 3, suAn: 1 }));
+    const atti = durumAl(reduce(cekti, { tip: 'AT', oyuncu: 3, tasId: son.id, suAn: 2 }));
+    expect(atti.sonuc?.bitisTipi).toBe('normal');
+    expect(atti.sonuc?.kazanan).toBe(3);
+  });
+
+  // Calma sirayi harcamaz (§5): destenin son tasi calanin ceza tasi olarak
+  // gitse de siradaki cekip oynuyor; el onun atisiyla kapaniyor.
+  it('son tas ceza tasi olarak gitse de el sirasi gelenin atisiyla kapanir', () => {
+    const atilan = t('kirmizi', 9);
+    const ceza = t('sari', 4);
+    const cekilen = t('sari', 5);
+    const durum = durumKur({
+      siradaki: 3,
+      faz: 'cekme',
+      istakalar: {
+        0: [t('mavi', 5)],
+        1: [t('mavi', 6)],
+        2: [t('mavi', 7)],
+        3: [t('mavi', 8)],
+      },
+      atikYiginlari: { 0: [atilan] },
+      deste: [ceza, cekilen],
+      pencere: pencereKur(0, atilan, { talepler: [2] }),
+    });
+    const cekti = durumAl(reduce(durum, { tip: 'CEK_DESTEDEN', oyuncu: 3, suAn: 1 }));
+    expect(cekti.deste).toHaveLength(0);
+    expect(cekti.istakalar[2].map((tas) => tas.id)).toContain(atilan.id);
+    expect(cekti.faz).toBe('atma');
+
+    const atti = durumAl(reduce(cekti, { tip: 'AT', oyuncu: 3, tasId: cekilen.id, suAn: 2 }));
+    expect(atti.sonuc?.bitisTipi).toBe('deste-tukendi');
+  });
+
+  // Yedek yol (§10.8): tur 15'te bir "cifti bende" hamlesi destenin son tasini
+  // ceza olarak alirsa kimse cekip atmamis olur; el siradakinin cekme
+  // denemesinde kapanir.
+  it('cekilecek tas yoksa el yine kimse bitirmeden kapanir — yedek yol', () => {
     const durum = durumKur({
       siradaki: 3,
       faz: 'cekme',

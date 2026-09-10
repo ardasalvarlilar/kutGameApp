@@ -1,17 +1,30 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
-import { SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
+import {
+  Animated,
+  Easing,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import {
   OYUNCULAR,
   eldenBitmeTuruMu,
   siradaIleri,
   turSarti,
   type OyuncuId,
+  type Tas,
+  type TasHareketi,
   type TasId,
   type TurNo,
 } from '@kut/engine';
 import { Dugme, DizmeDugmesi } from './bilesenler/Dugme';
-import { IZGARA_BOYU, Istaka, SLOT_EN } from './bilesenler/Istaka';
-import { Orta } from './bilesenler/Orta';
+import { useHedef } from './ogretici/hedefKaydi';
+import { IZGARA_BOYU, Istaka, SLOT_BOY, SLOT_EN } from './bilesenler/Istaka';
+import { Orta, type CekmeKaynagi } from './bilesenler/Orta';
+import { KapaliTas, TasGorseli } from './bilesenler/TasGorseli';
 import { OyuncuSeridi } from './bilesenler/OyuncuSeridi';
 import { PerAlani } from './bilesenler/PerAlani';
 import { PuanTablosu } from './bilesenler/PuanTablosu';
@@ -19,22 +32,26 @@ import { SiraSayaci } from './bilesenler/SiraSayaci';
 import { Ayarlar, type MasadakiOyuncu } from './bilesenler/Ayarlar';
 import type { SikayetSebebi } from './ag/api';
 import { UcanTas, type Nokta, type Ucus } from './bilesenler/UcanTas';
-import { hareketUcuslari } from './ucuslar';
+import { hareketUcuslari, ucanTasIdleri } from './ucuslar';
+import { atikAltindaki } from './atikBellegi';
 import { useCeviri, type MetinAnahtari } from './dil';
 import { hataMetni } from './hataMetinleri';
 import { gruplariKimlige, kutDiz, seriDiz } from '@kut/politika';
 import { bitirenTaslar, eldenBitmeCozumu } from './eldenBitme';
 import {
+  SATIR_SAYISI,
   ayir,
   duzenGruplari,
   duzenOlustur,
   duzenTazele,
+  slotaYerlestir,
   tasiTasi,
   topla,
   type Duzen,
 } from './duzen';
 import {
   MERKEZ_EN_AZ,
+  OLCULER,
   SUTUN_BOSLUK,
   yanSutunEni,
   yanTasEni,
@@ -44,6 +61,8 @@ import {
   anahtardanHedef,
   hedefAnahtari,
   hedefBul,
+  istakaSlotuBul,
+  merkez,
   type Dikdortgen,
   type HedefKaydi,
 } from './hedefler';
@@ -96,6 +115,43 @@ function yerlesimKur(ben: OyuncuId): Yerlesim {
   };
 }
 
+/**
+ * Parmaktaki tas: ortadan istakaya ya da istakadan masaya goturuluyor.
+ * Ikisi de ayni, en ustteki katmanda ciziliyor.
+ */
+interface Cekme {
+  readonly kaynak: CekmeKaynagi | 'istaka';
+  /** Obekten ya da istakadan alinan tas acik; desteden gelen kapali (null). */
+  readonly tas: Tas | null;
+}
+
+/** Istakaya birakildi, hamle gonderildi; tasin gelmesi bekleniyor. */
+interface BekleyenCekim {
+  /** Tasin konacagi slot — oyuncunun biraktigi yer. */
+  readonly slot: number;
+  /** Obekten alinan tasin kimligi; desteden cekilende bilinmiyor (null). */
+  readonly tasId: TasId | null;
+  /** Desteden cekilen tasi tanimak icin: cekmeden onceki istaka. */
+  readonly oncekiler: ReadonlySet<TasId>;
+}
+
+/**
+ * Sunucunun cevabi bu kadar surede gelmezse (ya da hamle reddedildiyse) tas
+ * elde tutulmayi birakir.
+ */
+const CEKME_BEKLEME_MS = 2000;
+
+/** Ekranin biriktirdigi hareket sayisi siniri (bkz. `hareketArsivi`). */
+const ARSIV_SINIRI = 256;
+
+/** Beklenen tas istakaya geldi mi? Geldiyse kimligi. */
+function gelenTas(bekleyen: BekleyenCekim, istaka: readonly Tas[]): TasId | null {
+  if (bekleyen.tasId !== null) {
+    return istaka.some((tas) => tas.id === bekleyen.tasId) ? bekleyen.tasId : null;
+  }
+  return istaka.find((tas) => !bekleyen.oncekiler.has(tas.id))?.id ?? null;
+}
+
 export interface MasaOzellikleri {
   /** Oyunu besleyen surucu — cihazdaki motor ya da sunucu (src/surucu.ts). */
   readonly surucu: MasaSurucusu;
@@ -142,6 +198,13 @@ export function Masa({
   const INSAN = gorunum.ben;
   const yerlesim = useMemo(() => yerlesimKur(INSAN), [INSAN]);
 
+  // Ogreticinin isik tutacagi ogeler. Dugmeler kendi `hedef` ozelligiyle
+  // kaydoluyor; buradakiler dugme olmayanlar.
+  const turHedefi = useHedef('tur');
+  const sartHedefi = useHedef('sart');
+  const istakaHedefi = useHedef('istaka');
+  const ortaHedefi = useHedef('orta');
+
   const [sutunSayisi, setSutunSayisi] = useState(20);
   const [duzen, setDuzen] = useState<Duzen>([]);
   const [secili, setSecili] = useState<readonly TasId[]>([]);
@@ -155,6 +218,94 @@ export function Masa({
   // gercek konum olculuyor (src/hedefler.ts).
   const [hedefler, setHedefler] = useState<readonly HedefKaydi[]>([]);
   const hedefRefleri = useRef(new Map<string, ComponentRef<typeof View> | null>());
+
+  // Ortadan cekilen tas EKRANIN EN USTUNDEKI katmanda ciziliyor: masa ile
+  // istaka ayri kutular ve tas ikisinin arasinda gidip geliyor — birinin
+  // icinde cizilse otekinin altinda kalirdi.
+  const [cekme, setCekme] = useState<Cekme | null>(null);
+  const cekmeKonumu = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
+  const katmanRef = useRef<ComponentRef<typeof View> | null>(null);
+  const katmanKokuRef = useRef<Nokta>({ x: 0, y: 0 });
+  const izgaraRef = useRef<ComponentRef<typeof View> | null>(null);
+  const izgaraAlaniRef = useRef<Dikdortgen | null>(null);
+  const kaynakRef = useRef<CekmeKaynagi>('deste');
+  /** Parmagin tasin sol ust kosesine gore yeri. */
+  const tutusRef = useRef<Nokta>({ x: 0, y: 0 });
+  /** Tasin alindigi yer — geri birakilirsa oraya doner. */
+  const cikisKonumuRef = useRef<Nokta>({ x: 0, y: 0 });
+  /** Her yeni surukleme artiriyor; eski geri donus animasyonu yenisini silmesin. */
+  const cekmeNoRef = useRef(0);
+  const bekleyenRef = useRef<BekleyenCekim | null>(null);
+  const bekleyenZamanlayiciRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
+   * Surukleyerek cektigim tasin `cekim` hareketi geldiginde ucurulmasin: tas
+   * parmagimla zaten istakaya geldi, ortadan bir kez daha ucmasi onu iki
+   * kez getirmek olurdu.
+   */
+  const kendiCekimimRef = useRef(false);
+  /**
+   * Surukleyerek attigim ya da isledigim tas: `atma`/`isleme` hareketi
+   * geldiginde koltuktan ucurulmasin, tas parmagimla zaten oraya gitti.
+   */
+  const kendiTasimRef = useRef<TasId | null>(null);
+  /** Masaya birakilan istaka tasi; elimden cikinca parmaktaki kopya kalkiyor. */
+  const bekleyenAtisRef = useRef<TasId | null>(null);
+  /** Masaya birakilan tas hedefine otururken masadaki boya kuculuyor. */
+  const cekmeOlcegi = useRef(new Animated.Value(1)).current;
+
+  const cekmeyiBitir = useCallback(() => {
+    if (bekleyenZamanlayiciRef.current !== null) clearTimeout(bekleyenZamanlayiciRef.current);
+    bekleyenZamanlayiciRef.current = null;
+    bekleyenRef.current = null;
+    bekleyenAtisRef.current = null;
+    setCekme(null);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (bekleyenZamanlayiciRef.current !== null) clearTimeout(bekleyenZamanlayiciRef.current);
+    },
+    [],
+  );
+
+  /** Parmak noktasini (ekran) katmandaki tasin sol ust kosesine cevirir. */
+  const cekmeKonumuHesapla = useCallback(
+    (nokta: Nokta): Nokta => ({
+      x: nokta.x - katmanKokuRef.current.x - tutusRef.current.x,
+      y: nokta.y - katmanKokuRef.current.y - tutusRef.current.y,
+    }),
+    [],
+  );
+
+  const katmaniOlc = useCallback(() => {
+    katmanRef.current?.measureInWindow((x, y) => {
+      katmanKokuRef.current = { x, y };
+    });
+  }, []);
+
+  /**
+   * Oyuncu vazgecti (tasi hedefe birakmadi) ya da hamle olmadi: tas alindigi
+   * yere geri kayip orada kayboluyor — ortadan alinan ortaya, istakadan
+   * alinan kendi slotuna.
+   */
+  const cekmeyiGeriGotur = useCallback(() => {
+    const no = cekmeNoRef.current;
+    Animated.parallel([
+      Animated.timing(cekmeKonumu, {
+        toValue: cikisKonumuRef.current,
+        duration: 160,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false,
+      }),
+      Animated.timing(cekmeOlcegi, { toValue: 1, duration: 160, useNativeDriver: false }),
+    ]).start(() => {
+      if (cekmeNoRef.current === no) setCekme(null);
+    });
+  }, [cekmeKonumu, cekmeOlcegi]);
+
+  const izgaraRefAl = useCallback((gorunum: ComponentRef<typeof View> | null) => {
+    izgaraRef.current = gorunum;
+  }, []);
 
   const cal = useSes(sesAcik);
   const sesSecici = useSesSecici();
@@ -177,13 +328,28 @@ export function Masa({
   // oyunda her sunucu paketi yeni bir `istakam` dizisi getiriyor ve bu effect
   // her pakette kosuyor; yeni dizi dondurmek, rakip hamlelerinde bile masayi
   // iki kez yeniden cizdiriyordu.
+  //
+  // Ortadan surukleyerek cektigim tas geldiyse `duzenTazele` onu sona koyuyor;
+  // `slotaYerlestir` oradan oyuncunun biraktigi slota tasiyor.
   useEffect(() => {
-    setDuzen((onceki) => duzenTazele(onceki, istakam, sutunSayisi));
+    const bekleyen = bekleyenRef.current;
+    const gelen = bekleyen === null ? null : gelenTas(bekleyen, istakam);
+    setDuzen((onceki) => {
+      const tazelenmis = duzenTazele(onceki, istakam, sutunSayisi);
+      return bekleyen === null || gelen === null
+        ? tazelenmis
+        : slotaYerlestir(tazelenmis, gelen, bekleyen.slot, sutunSayisi);
+    });
+    // Masaya birakilan istaka tasi elimden cikti (atildi, islendi): parmaktaki
+    // kopya kalkiyor, tas artik hedefinde cizili.
+    const atilan = bekleyenAtisRef.current;
+    const atildi = atilan !== null && !istakam.some((tas) => tas.id === atilan);
+    if (gelen !== null || atildi) cekmeyiBitir();
     setSecili((onceki) => {
       const kalan = onceki.filter((id) => istakam.some((tas) => tas.id === id));
       return kalan.length === onceki.length ? onceki : kalan;
     });
-  }, [istakam, sutunSayisi]);
+  }, [istakam, sutunSayisi, cekmeyiBitir]);
 
   // Masada artik SAAT ISLEMIYOR.
   //
@@ -216,6 +382,39 @@ export function Masa({
   // uretebiliyor (ceken + calan + ceza) ve ucu de gorunmeli.
   const ucus = ucusKuyrugu[0] ?? null;
   const ucusuBitir = useCallback(() => setUcusKuyrugu((kuyruk) => kuyruk.slice(1)), []);
+  // Havadaki tas varis yerinde gorunmemeli: ayni sirada birden fazla hamle
+  // varken (ac + at) atilan tas kendi ucusundan ONCE yiginda beliriyordu.
+  const ucanlar = useMemo(() => ucanTasIdleri(ucusKuyrugu), [ucusKuyrugu]);
+  // Parmaktaki tas da obekte degil. Ikisinde de obek ALTINDAKI tasi ciziyor
+  // (`atikAlti`) — eskiden orada gri bir kapali tas cikiyordu.
+  const ustTasGizli =
+    gorunum.atikUstu !== null && (ucanlar.has(gorunum.atikUstu.id) || cekme?.kaynak === 'atik');
+  // Projeksiyon alttaki tasi vermiyor (KURALLAR.md §10.3); oyuncunun az once
+  // gordugu hareketlerden kuruluyor (src/atikBellegi.ts). Motorun listesi son
+  // 8 hareketi tutuyor ve bir bot tek sirada alip acip isleyip atabiliyor —
+  // alttaki tasin atisi o pencereden cikabiliyor. Bu yuzden gorulen
+  // hareketler burada biriktiriliyor; tekrari sira numarasi eliyor.
+  const hareketArsiviRef = useRef<{ liste: TasHareketi[]; sonNo: number }>({
+    liste: [],
+    sonNo: 0,
+  });
+  const hareketArsivi = useMemo(() => {
+    const arsiv = hareketArsiviRef.current;
+    // Yeni el: numara geri gitti.
+    if (gorunum.sonHareketNo < arsiv.sonNo) arsiv.liste = [];
+    for (const hareket of gorunum.sonHareketler) {
+      if (hareket.sira > arsiv.sonNo) arsiv.liste.push(hareket);
+    }
+    arsiv.sonNo = gorunum.sonHareketNo;
+    // Yiginin tamami bile 106 tasi gecmez; sinir yalnizca buyumeyi durduruyor.
+    if (arsiv.liste.length > ARSIV_SINIRI) arsiv.liste = arsiv.liste.slice(-ARSIV_SINIRI);
+    return arsiv.liste.slice();
+  }, [gorunum.sonHareketler, gorunum.sonHareketNo]);
+  const obekAltindaki = useMemo(
+    () =>
+      ustTasGizli ? atikAltindaki(hareketArsivi, gorunum.atikUstu, gorunum.atikAdedi) : null,
+    [ustTasGizli, hareketArsivi, gorunum.atikUstu, gorunum.atikAdedi],
+  );
 
   /**
    * Perin masa icindeki merkezi — olculemezse null.
@@ -289,7 +488,36 @@ export function Masa({
     // (ya da yeniden baglanan) coktan olmus bir hareketi izlememeli.
     if (gorulen === null || masaOlcu.en === 0) return;
 
-    const yeniler = gorunum.sonHareketler.filter((hareket) => hareket.sira > gorulen);
+    const yeniler = gorunum.sonHareketler
+      .filter((hareket) => hareket.sira > gorulen)
+      .filter((hareket) => {
+        // Parmagimla tasidigim tasi bir de koltuktan/ortadan ucurmak onu iki
+        // kez goturmek olurdu. Sure dolunca sunucunun benim yerime yaptigi
+        // hamleler ise ucmaya devam ediyor — onlari ben tasimadim.
+        if (hareket.oyuncu !== gorunum.ben) return true;
+
+        if (
+          kendiCekimimRef.current &&
+          hareket.tip === 'cekim' &&
+          (hareket.kaynak === 'deste' || hareket.kaynak === 'atik')
+        ) {
+          kendiCekimimRef.current = false;
+          return false;
+        }
+
+        const tasim = kendiTasimRef.current;
+        const benimTasim =
+          tasim !== null &&
+          ((hareket.tip === 'atma' && hareket.tas.id === tasim) ||
+            (hareket.tip === 'isleme' &&
+              hareket.taslar.length === 1 &&
+              hareket.taslar[0]?.id === tasim));
+        if (benimTasim) {
+          kendiTasimRef.current = null;
+          return false;
+        }
+        return true;
+      });
     if (yeniler.length === 0) return;
 
     const kur = (perNoktalari: Map<number, Nokta>): void => {
@@ -319,6 +547,7 @@ export function Masa({
       iptal = true;
     };
   }, [
+    gorunum.ben,
     gorunum.sonHareketNo,
     gorunum.sonHareketler,
     masaOlcu,
@@ -381,7 +610,7 @@ export function Masa({
    * bolunme aranir: bolunuyorsa bitirme hamlesi gonderilir.
    */
   const at = useCallback(
-    (tasId: TasId) => {
+    (tasId: TasId): boolean => {
       const suAn = Date.now();
 
       if (eldenBitmeTuruMu(gorunum.tur)) {
@@ -396,13 +625,15 @@ export function Masa({
           });
           if (bitti) {
             setSecili([]);
-            return;
+            return true;
           }
           // Motor reddettiyse israr etme; normal atisa dus.
         }
       }
 
-      if (gonder({ tip: 'AT', oyuncu: INSAN, tasId, suAn })) setSecili([]);
+      const gitti = gonder({ tip: 'AT', oyuncu: INSAN, tasId, suAn });
+      if (gitti) setSecili([]);
+      return gitti;
     },
     [gonder, gorunum.tur, gorunum.istakam],
   );
@@ -458,6 +689,39 @@ export function Masa({
     });
   }, []);
 
+  // --- Istakadan tas tasima --------------------------------------------------
+  // Istakadaki tas parmakla masanin ustune goturuluyor; ortadan cekmeyle ayni
+  // katmanda ciziliyor. Yigina birakilirsa atilir, pere birakilirsa islenir,
+  // istakaya birakilirsa oraya yerlesir; baska yere birakilirsa oyuncu
+  // vazgecmis sayilir ve tas kendi slotuna kayarak doner.
+
+  const istakadanBasla = useCallback(
+    (tasId: TasId, nokta: Nokta, kose: Nokta) => {
+      const tas = istakam.find((aday) => aday.id === tasId);
+      if (tas === undefined) return;
+      // Hedeflerin ekrandaki yeri masa doldukca kayiyor; tam bu anda olculuyor
+      // ki birakirken guncel olsun.
+      hedefleriOlc();
+      katmaniOlc();
+      cekmeNoRef.current += 1;
+      cekmeKonumu.stopAnimation();
+      cekmeOlcegi.stopAnimation();
+      cekmeOlcegi.setValue(1);
+      tutusRef.current = { x: nokta.x - kose.x, y: nokta.y - kose.y };
+      const cikis = cekmeKonumuHesapla(nokta);
+      cikisKonumuRef.current = cikis;
+      cekmeKonumu.setValue(cikis);
+      setCekme({ kaynak: 'istaka', tas });
+    },
+    [istakam, hedefleriOlc, katmaniOlc, cekmeKonumu, cekmeOlcegi, cekmeKonumuHesapla],
+  );
+
+  /** Tas istakanin icinde birakildi; yerini Istaka degistirdi, kopya kalkar. */
+  const istakadaBirakti = useCallback(() => {
+    cekmeNoRef.current += 1;
+    setCekme(null);
+  }, []);
+
   /**
    * Tas istakadan cikarilip masaya birakildi.
    *
@@ -469,29 +733,72 @@ export function Masa({
   const masayaBirak = useCallback(
     (tasId: TasId, nokta: Nokta) => {
       const hedef = hedefBul(nokta, hedefler);
-      if (hedef === null) return;
-      const suAn = Date.now();
-
-      if (hedef.tip === 'atik') {
-        // `at` uzerinden gidiyoruz, dogrudan `AT` gondermiyoruz: tur 16'da
-        // elden bitme kontrolu orada (KURALLAR.md §3).
-        at(tasId);
+      const kayit =
+        hedef === null
+          ? undefined
+          : hedefler.find((aday) => hedefAnahtari(aday.hedef) === hedefAnahtari(hedef));
+      // Hicbir hedefe dusmedi ya da sira bende degil: oyuncu vazgecmis
+      // sayilir, tas istakadaki yerine kayarak doner.
+      if (hedef === null || kayit === undefined || !izin.atabilir) {
+        cekmeyiGeriGotur();
         return;
       }
-      if (gonder({ tip: 'ISLE', oyuncu: INSAN, perId: hedef.perId, tasIdler: [tasId], suAn })) {
-        setSecili((onceki) => onceki.filter((id) => id !== tasId));
+
+      kendiTasimRef.current = tasId;
+      bekleyenAtisRef.current = tasId;
+      const gitti =
+        hedef.tip === 'atik'
+          ? // `at` uzerinden gidiyoruz, dogrudan `AT` gondermiyoruz: tur 16'da
+            // elden bitme kontrolu orada (KURALLAR.md §3).
+            at(tasId)
+          : gonder({
+              tip: 'ISLE',
+              oyuncu: INSAN,
+              perId: hedef.perId,
+              tasIdler: [tasId],
+              suAn: Date.now(),
+            });
+      if (!gitti) {
+        kendiTasimRef.current = null;
+        bekleyenAtisRef.current = null;
+        cekmeyiGeriGotur();
+        return;
       }
+      if (hedef.tip === 'per') setSecili((onceki) => onceki.filter((id) => id !== tasId));
+
+      // Tas hedefin ustune kayip masadaki taslarin boyuna kuculuyor. Gercek tas
+      // orada belirince parmaktaki kopya kalkiyor (istaka effect'i).
+      const koku = katmanKokuRef.current;
+      const orta = merkez(kayit.alan);
+      Animated.parallel([
+        Animated.timing(cekmeKonumu, {
+          toValue: {
+            x: orta.x - OLCULER.buyuk.en / 2 - koku.x,
+            y: orta.y - OLCULER.buyuk.boy / 2 - koku.y,
+          },
+          duration: 110,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: false,
+        }),
+        Animated.timing(cekmeOlcegi, {
+          toValue: OLCULER.orta.en / OLCULER.buyuk.en,
+          duration: 110,
+          useNativeDriver: false,
+        }),
+      ]).start();
+
+      // Cevrimici oyunda karar sunucuda. Cevap gelmez ya da hamle reddedilirse
+      // tas elde kalir; o zaman kopya da istakadaki yerine doner.
+      if (bekleyenZamanlayiciRef.current !== null) clearTimeout(bekleyenZamanlayiciRef.current);
+      bekleyenZamanlayiciRef.current = setTimeout(() => {
+        if (bekleyenAtisRef.current !== tasId) return;
+        kendiTasimRef.current = null;
+        bekleyenAtisRef.current = null;
+        cekmeyiGeriGotur();
+      }, CEKME_BEKLEME_MS);
     },
-    [hedefler, gonder, at],
+    [hedefler, izin.atabilir, at, gonder, INSAN, cekmeKonumu, cekmeOlcegi, cekmeyiGeriGotur],
   );
-
-  const cekDesteden = useCallback(() => {
-    gonder({ tip: 'CEK_DESTEDEN', oyuncu: INSAN, suAn: Date.now() });
-  }, [gonder]);
-
-  const cekYerden = useCallback(() => {
-    gonder({ tip: 'CEK_ATIKTAN', oyuncu: INSAN, suAn: Date.now() });
-  }, [gonder]);
 
   function grubuSec() {
     const genisletilmis = gruplar.filter((grup) => grup.some((id) => secili.includes(id))).flat();
@@ -616,6 +923,122 @@ export function Masa({
       ? t(gorunum.faz === 'cekme' ? 'masa.siraSendeCek' : 'masa.siraSendeOyna')
       : t('masa.oynuyor', { ad: ADLAR[gorunum.siradaki] });
 
+  // --- Ortadan tas cekme ------------------------------------------------------
+  // Tas desteden ya da obekten parmakla alinip istakaya goturuluyor, istakada
+  // tas tasir gibi. Cekme ancak tas ISTAKANIN USTUNE birakilinca oluyor;
+  // ortaya geri getirip birakan fikrini degistirmis sayilir, tas yerine doner.
+  // Birakildigi slota da o yerlesiyor (`slotaYerlestir`).
+  //
+  // Eskiden deste ya da obek asagi "firlatilinca" cekiliyordu ve tas istakanin
+  // sonunda beliriyordu; oyuncu ne vazgecebiliyor ne yerini secebiliyordu.
+
+  const cekmeBasla = useCallback(
+    (kaynak: CekmeKaynagi, nokta: Nokta, tutus: Nokta) => {
+      cekmeNoRef.current += 1;
+      cekmeKonumu.stopAnimation();
+      cekmeOlcegi.stopAnimation();
+      cekmeOlcegi.setValue(1);
+      kaynakRef.current = kaynak;
+      tutusRef.current = tutus;
+      const cikis = cekmeKonumuHesapla(nokta);
+      cikisKonumuRef.current = cikis;
+      cekmeKonumu.setValue(cikis);
+      setCekme({ kaynak, tas: kaynak === 'atik' ? gorunum.atikUstu : null });
+      // Birakildiginda karar vermek icin: istakanin EKRANDAKI yeri.
+      katmaniOlc();
+      izgaraRef.current?.measureInWindow((x, y, en, boy) => {
+        izgaraAlaniRef.current = en > 0 && boy > 0 ? { x, y, en, boy } : null;
+      });
+    },
+    [cekmeKonumu, cekmeOlcegi, cekmeKonumuHesapla, katmaniOlc, gorunum.atikUstu],
+  );
+
+  const cekmeHareket = useCallback(
+    (nokta: Nokta) => cekmeKonumu.setValue(cekmeKonumuHesapla(nokta)),
+    [cekmeKonumu, cekmeKonumuHesapla],
+  );
+
+  const cekmeBirak = useCallback(
+    (nokta: Nokta) => {
+      const kaynak = kaynakRef.current;
+      const alan = izgaraAlaniRef.current;
+      const slot =
+        alan === null
+          ? null
+          : istakaSlotuBul(nokta, alan, {
+              sutunSayisi,
+              satirSayisi: SATIR_SAYISI,
+              slotEn: SLOT_EN,
+              slotBoy: SLOT_BOY,
+            });
+      // Surukleme surerken sira degismis olabilir (sure doldu, sunucu cekti).
+      const izinli = kaynak === 'atik' ? atikAlinabilir : izin.cekebilir;
+      if (alan === null || slot === null || !izinli) {
+        cekmeyiGeriGotur();
+        return;
+      }
+
+      const bekleyen: BekleyenCekim = {
+        slot,
+        tasId: kaynak === 'atik' ? (gorunum.atikUstu?.id ?? null) : null,
+        oncekiler: new Set(istakam.map((tas) => tas.id)),
+      };
+      bekleyenRef.current = bekleyen;
+      kendiCekimimRef.current = true;
+      const gitti = gonder(
+        kaynak === 'atik'
+          ? { tip: 'CEK_ATIKTAN', oyuncu: INSAN, suAn: Date.now() }
+          : { tip: 'CEK_DESTEDEN', oyuncu: INSAN, suAn: Date.now() },
+      );
+      if (!gitti) {
+        bekleyenRef.current = null;
+        kendiCekimimRef.current = false;
+        cekmeyiGeriGotur();
+        return;
+      }
+
+      // Tas slotuna oturuyor ve sunucunun cevabi gelene kadar orada duruyor;
+      // cevap gelince gercek tas ayni yerde beliriyor (yukaridaki effect).
+      const koku = katmanKokuRef.current;
+      Animated.timing(cekmeKonumu, {
+        toValue: {
+          x:
+            alan.x +
+            (slot % sutunSayisi) * SLOT_EN +
+            (OLCULER.buyuk.en - OLCULER.orta.en) / 2 -
+            koku.x,
+          y:
+            alan.y +
+            Math.floor(slot / sutunSayisi) * SLOT_BOY +
+            (OLCULER.buyuk.boy - OLCULER.orta.boy) / 2 -
+            koku.y,
+        },
+        duration: 90,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false,
+      }).start();
+
+      if (bekleyenZamanlayiciRef.current !== null) clearTimeout(bekleyenZamanlayiciRef.current);
+      bekleyenZamanlayiciRef.current = setTimeout(() => {
+        if (bekleyenRef.current !== bekleyen) return;
+        kendiCekimimRef.current = false;
+        cekmeyiBitir();
+      }, CEKME_BEKLEME_MS);
+    },
+    [
+      sutunSayisi,
+      atikAlinabilir,
+      izin.cekebilir,
+      gorunum.atikUstu,
+      istakam,
+      gonder,
+      INSAN,
+      cekmeKonumu,
+      cekmeyiGeriGotur,
+      cekmeyiBitir,
+    ],
+  );
+
   return (
     <SafeAreaView style={stil.ekran}>
       <StatusBar hidden />
@@ -634,35 +1057,39 @@ export function Masa({
             {/* Karsidaki oyuncu — ekranin en ustu */}
             <View style={stil.ustSira}>
               <OyuncuSeridi oyuncu={yerlesim.karsi} ad={ADLAR[yerlesim.karsi]} yon="ust" gorunum={gorunum} />
-              <PerAlani oyuncu={yerlesim.karsi} gorunum={gorunum} tasEni={yatayTas} onPer={isle} perRef={perRef} />
+              <PerAlani oyuncu={yerlesim.karsi} gorunum={gorunum} tasEni={yatayTas} onPer={isle} perRef={perRef} ucanlar={ucanlar} />
             </View>
 
             <View style={stil.ortaSira}>
               <View style={[stil.solSutun, { maxWidth: yanSutun }]}>
                 <OyuncuSeridi oyuncu={yerlesim.sol} ad={ADLAR[yerlesim.sol]} yon="sol" gorunum={gorunum} />
-                <PerAlani oyuncu={yerlesim.sol} gorunum={gorunum} tasEni={yanTas} dikey onPer={isle} perRef={perRef} />
+                <PerAlani oyuncu={yerlesim.sol} gorunum={gorunum} tasEni={yanTas} dikey onPer={isle} perRef={perRef} ucanlar={ucanlar} />
               </View>
 
-              <View style={stil.merkez}>
+              <View ref={ortaHedefi} collapsable={false} style={stil.merkez}>
                 <Orta
                   gorunum={gorunum}
                   alinabilir={atikAlinabilir}
-                  onYerdenAl={cekYerden}
-                  onDesteden={cekDesteden}
                   cekilebilir={izin.cekebilir}
                   obekRef={obekRef}
+                  ustTasGizli={ustTasGizli}
+                  altindaki={obekAltindaki}
+                  onCekmeBasla={cekmeBasla}
+                  onCekmeHareket={cekmeHareket}
+                  onCekmeBirak={cekmeBirak}
+                  onCekmeIptal={cekmeyiGeriGotur}
                 />
               </View>
 
               <View style={[stil.sagSutun, { maxWidth: yanSutun }]}>
-                <PerAlani oyuncu={yerlesim.sag} gorunum={gorunum} tasEni={yanTas} dikey onPer={isle} perRef={perRef} />
+                <PerAlani oyuncu={yerlesim.sag} gorunum={gorunum} tasEni={yanTas} dikey onPer={isle} perRef={perRef} ucanlar={ucanlar} />
                 <OyuncuSeridi oyuncu={yerlesim.sag} ad={ADLAR[yerlesim.sag]} yon="sag" gorunum={gorunum} />
               </View>
             </View>
 
             {/* Kendi perlerim — istakamin hemen onunde */}
             <View style={stil.altSira}>
-              <PerAlani oyuncu={INSAN} gorunum={gorunum} tasEni={yatayTas} onPer={isle} perRef={perRef} />
+              <PerAlani oyuncu={INSAN} gorunum={gorunum} tasEni={yatayTas} onPer={isle} perRef={perRef} ucanlar={ucanlar} />
             </View>
 
             {ucus !== null ? <UcanTas ucus={ucus} onBitti={ucusuBitir} /> : null}
@@ -730,12 +1157,16 @@ export function Masa({
               {/* Geri sayim TUR satirinin sagina bindi: yan panelde alti
                   dugme satiri ancak boyle sigiyor. */}
               <View style={stil.durumUst}>
-                <Text style={stil.turMetni}>{t('masa.turNo', { tur: gorunum.tur })}</Text>
+                <Text ref={turHedefi} style={stil.turMetni}>
+                  {t('masa.turNo', { tur: gorunum.tur })}
+                </Text>
                 <SiraSayaci bitis={sayacBitisi} sure={siraSuresi} />
               </View>
               {/* Sart metni motorda TURKCE duruyor (turlar.ts); motor saf
                   kaldigi icin ceviri burada, tur numarasindan. */}
-              <Text style={stil.sartMetni}>{t(TUR_SART_ANAHTARLARI[gorunum.tur])}</Text>
+              <Text ref={sartHedefi} style={stil.sartMetni}>
+                {t(TUR_SART_ANAHTARLARI[gorunum.tur])}
+              </Text>
               <Text style={stil.fazMetni}>
                 {fazMetni}
                 {/* §9 0.4 — suresini dolduran oyuncunun hakki kisalir. */}
@@ -761,18 +1192,19 @@ export function Masa({
             </View>
 
             <ScrollView contentContainerStyle={stil.dugmeler} showsVerticalScrollIndicator={false}>
-              {/* ÇEK / YERDEN AL / AT dugmeleri yok: cekme ortadaki desteyi ya
-                  da obegi asagi surukleyerek, atma ise tasi istakadan yukari
-                  surukleyerek yapiliyor. Kalan uzun etiketliler tam satiri
+              {/* ÇEK / YERDEN AL / AT dugmeleri yok: cekme ortadaki desteden
+                  ya da obekten tasi istakaya surukleyip birakarak, atma ise
+                  tasi istakadan obege surukleyerek yapiliyor. Kalan uzun etiketliler tam satiri
                   kapliyor ki yazi kirpilmasin. */}
-              <Dugme etiket={t('masa.ac', { sayi: acilisGruplari.length })} aktif={izin.atabilir && acilisGruplari.length > 0} onBas={ac} tur="vurgu" />
-              <Dugme etiket={t('masa.indir')} aktif={izin.atabilir && acilisGruplari.length > 0} onBas={indir} />
+              <Dugme etiket={t('masa.ac', { sayi: acilisGruplari.length })} aktif={izin.atabilir && acilisGruplari.length > 0} onBas={ac} tur="vurgu" hedef="ac" />
+              <Dugme etiket={t('masa.indir')} aktif={izin.atabilir && acilisGruplari.length > 0} onBas={indir} hedef="indir" />
               <Dugme
                 etiket={t('masa.taslariIsle')}
                 aktif={izin.atabilir && gorunum.islemeYapabilirim && islenebilirVar}
                 onBas={taslariIsle}
                 tur="vurgu"
                 genis
+                hedef="isle"
               />
               <Dugme
                 etiket={t('masa.okeyAl', { sayi: gorunum.okeyFirsatlarim.length })}
@@ -780,13 +1212,14 @@ export function Masa({
                 onBas={okeyAl}
                 tur="vurgu"
                 genis
+                hedef="okeyAl"
               />
               <Dugme etiket={t('masa.grubuSec')} aktif={secili.length > 0} onBas={grubuSec} />
               <Dugme etiket={t('masa.ayir')} aktif={secili.length > 0} onBas={() => setDuzen(ayir(duzen, secili, sutunSayisi))} />
               <Dugme etiket={t('masa.topla')} aktif={gruplar.length > 1} onBas={() => setDuzen(topla(duzen, sutunSayisi))} />
-              <Dugme etiket={t('masa.ayarlar')} aktif onBas={() => setAyarlarAcik(true)} />
-              <Dugme etiket={t('masa.istiyorum')} aktif={izin.talepEdebilir} onBas={() => gonder({ tip: 'CALMA_TALEBI', oyuncu: INSAN, suAn: Date.now() })} tur="vurgu" />
-              <Dugme etiket={t('masa.ciftimVar')} aktif={izin.ciftTalepEdebilir} onBas={() => gonder({ tip: 'CIFT_TALEBI', oyuncu: INSAN, suAn: Date.now() })} tur="vurgu" />
+              <Dugme etiket={t('masa.ayarlar')} aktif onBas={() => setAyarlarAcik(true)} hedef="ayarlar" />
+              <Dugme etiket={t('masa.istiyorum')} aktif={izin.talepEdebilir} onBas={() => gonder({ tip: 'CALMA_TALEBI', oyuncu: INSAN, suAn: Date.now() })} tur="vurgu" hedef="istiyorum" />
+              <Dugme etiket={t('masa.ciftimVar')} aktif={izin.ciftTalepEdebilir} onBas={() => gonder({ tip: 'CIFT_TALEBI', oyuncu: INSAN, suAn: Date.now() })} tur="vurgu" hedef="ciftimVar" />
             </ScrollView>
 
             <Text style={stil.hata} numberOfLines={2}>
@@ -809,7 +1242,11 @@ export function Masa({
           </View>
         </View>
 
-        <View style={[stil.altAlan, { height: IZGARA_BOYU + 22 }]}>
+        <View
+          ref={istakaHedefi}
+          collapsable={false}
+          style={[stil.altAlan, { height: IZGARA_BOYU + 22 }]}
+        >
           <DizmeDugmesi ustSatir={t('masa.kutDiz')} altSatir={t('masa.diz')} aktif={istakam.length > 0} onBas={() => dizle('kut')} />
           <Istaka
             taslar={istakam}
@@ -822,11 +1259,43 @@ export function Masa({
             onTas={tasSec}
             onTasiTasi={tasSurukle}
             onDisariBirak={masayaBirak}
-            onSuruklemeBasladi={hedefleriOlc}
+            onSuruklemeBasladi={istakadanBasla}
+            onSuruklemeHareket={cekmeHareket}
+            onIstakadaBirakti={istakadaBirakti}
+            onSuruklemeIptal={cekmeyiGeriGotur}
+            tasinanTasId={cekme?.kaynak === 'istaka' ? (cekme.tas?.id ?? null) : null}
             onOlcum={olcumAl}
+            izgaraRef={izgaraRefAl}
           />
           <DizmeDugmesi ustSatir={t('masa.seriDiz')} altSatir={t('masa.diz')} aktif={istakam.length > 0} onBas={() => dizle('seri')} />
         </View>
+      </View>
+
+      {/* Parmaktaki tas — ortadan cekilen ya da istakadan tasinan. Masanin
+          da istakanin da ustunde. */}
+      <View ref={katmanRef} collapsable={false} style={stil.cekmeKatmani} onLayout={katmaniOlc}>
+        {cekme !== null ? (
+          <Animated.View
+            style={[
+              stil.cekilenTas,
+              { transform: [...cekmeKonumu.getTranslateTransform(), { scale: cekmeOlcegi }] },
+            ]}
+          >
+            {cekme.tas === null ? (
+              <KapaliTas boy="orta" />
+            ) : cekme.kaynak === 'istaka' ? (
+              <TasGorseli
+                tas={cekme.tas}
+                secili={secili.includes(cekme.tas.id)}
+                isler={gorunum.islerTaslarim.includes(cekme.tas.id)}
+                okeyeYarar={okeyeYarayanlar.includes(cekme.tas.id)}
+                bitirir={bitirenler.includes(cekme.tas.id)}
+              />
+            ) : (
+              <TasGorseli tas={cekme.tas} boy="orta" />
+            )}
+          </Animated.View>
+        ) : null}
       </View>
 
       {ayarlarAcik ? (
@@ -934,4 +1403,16 @@ const stil = StyleSheet.create({
   hata: { color: renkler.uyari, fontSize: 10, minHeight: 22 },
 
   altAlan: { flexDirection: 'row', gap: 6 },
+
+  cekmeKatmani: { ...StyleSheet.absoluteFillObject, pointerEvents: 'none' },
+  cekilenTas: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    shadowColor: '#000',
+    shadowOpacity: 0.35,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 8,
+  },
 });

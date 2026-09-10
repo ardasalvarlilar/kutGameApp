@@ -213,6 +213,16 @@ export interface ElParametreleri {
   readonly tohum: number;
 }
 
+export interface KuruluElParametreleri {
+  readonly tur: TurNo;
+  readonly baslayan: OyuncuId;
+  /**
+   * DAGITIM SIRASINDAKI tam deste (106 tas). Karistirilmaz: ne verilirse
+   * sirayla dagitilir.
+   */
+  readonly deste: readonly Tas[];
+}
+
 /**
  * KURALLAR.md §1 — dagitim.
  * Her oyuncuya 14, baslayana 15 tas. Geriye 49 tas kalir.
@@ -223,8 +233,37 @@ export function elBaslat(
   ayarlar: KuralAyarlari = VARSAYILAN_AYARLAR,
 ): OyunDurumu {
   const { tur, baslayan, tohum } = parametreler;
-  const karisik = karistir(desteOlustur(), rngOlustur(tohum));
+  return dagit(tur, baslayan, karistir(desteOlustur(), rngOlustur(tohum)), ayarlar);
+}
 
+/**
+ * Desteyi KARISTIRMADAN dagitir — ogretici senaryosu icin.
+ *
+ * `elBaslat`in tohumu disaridan almasi yetmiyor: ogreticinin dort elin de
+ * tamamini bilmesi gerekiyor (kullanicida hazir 2 x uclu kut, bir yer
+ * tutucunun okeyle acmasi, digerinin ise yarayan tas atmasi). Bunu tohum
+ * arayarak bulmak pratik degil.
+ *
+ * Motor kurali #2 BOZULMUYOR, aksine sonuna kadar uygulaniyor: burada hic
+ * rastgelelik yok, cikti tamamen girdinin fonksiyonu.
+ *
+ * Desteyi cagiran kuruyor; eksik ya da tekrarli deste vermek cagiranin hatasi
+ * (`apps/mobile/src/ogretici` bunu testle koruyor).
+ */
+export function elKur(
+  parametreler: KuruluElParametreleri,
+  ayarlar: KuralAyarlari = VARSAYILAN_AYARLAR,
+): OyunDurumu {
+  const { tur, baslayan, deste } = parametreler;
+  return dagit(tur, baslayan, deste, ayarlar);
+}
+
+function dagit(
+  tur: TurNo,
+  baslayan: OyuncuId,
+  karisik: readonly Tas[],
+  ayarlar: KuralAyarlari,
+): OyunDurumu {
   const dagitilan: Tas[][] = [[], [], [], []];
   let sonraki = 0;
   for (let ofset = 0; ofset < 4; ofset++) {

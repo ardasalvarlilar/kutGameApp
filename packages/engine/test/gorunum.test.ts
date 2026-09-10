@@ -191,4 +191,29 @@ describe('tek atik obegi — en son atilan ustte', () => {
     expect(viewFor(durumKur(), 0).atikUstu).toBe(null);
     expect(viewFor(durumKur(), 0).atikAdedi).toBe(0);
   });
+
+  // Oyuncunun bildirdigi senaryo: benim attigimi sagimdaki almiyor, desteden
+  // cekip baska bir tas atiyor; onu da onun sagindaki yerden aliyor. Obekte
+  // benim tasim kalmali. (Ekranda gri yer tutucu cikmasinin sebebi motor
+  // degildi — bu test motorun dogru oldugunu sabitliyor.)
+  it('sonraki atilan yerden alininca onceki tas yeniden ustte', () => {
+    const baslangic = durumKur({
+      siradaki: 0,
+      faz: 'atma',
+      istakalar: {
+        0: [a, ...dolgu(4, [a, b, c], 30)],
+        3: [b, ...dolgu(4, [a, b, c], 40)],
+        2: dolgu(4, [a, b, c], 50),
+      },
+      deste: dolgu(6, [a, b, c], 60),
+    });
+    const s1 = durumAl(reduce(baslangic, { tip: 'AT', oyuncu: 0, tasId: a.id, suAn: 1 }));
+    const s2 = durumAl(reduce(s1, { tip: 'CEK_DESTEDEN', oyuncu: 3, suAn: 2 }));
+    const s3 = durumAl(reduce(s2, { tip: 'AT', oyuncu: 3, tasId: b.id, suAn: 3 }));
+    expect(viewFor(s3, 0).atikUstu?.id).toBe(b.id);
+
+    const s4 = durumAl(reduce(s3, { tip: 'CEK_ATIKTAN', oyuncu: 2, suAn: 4 }));
+    expect(viewFor(s4, 0).atikUstu?.id).toBe(a.id);
+    expect(viewFor(s4, 0).atikAdedi).toBe(1);
+  });
 });

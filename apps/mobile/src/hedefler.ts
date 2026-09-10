@@ -91,6 +91,48 @@ export function hedefBul(
   return enYakini(payIcinde);
 }
 
+/**
+ * Istaka izgarasinin disina tasan yakalama payi (px).
+ *
+ * Izgaranin cevresinde ahsap kenarlar var (ust 4 + 3, alt 6 + 3, yanlar 6);
+ * oyuncu tasi istakanin kenarina biraktiginda da "istakaya koydum" demek.
+ */
+export const ISTAKA_PAYI = 12;
+
+export interface IzgaraOlcusu {
+  readonly sutunSayisi: number;
+  readonly satirSayisi: number;
+  readonly slotEn: number;
+  readonly slotBoy: number;
+}
+
+/**
+ * Ortadan suruklenen tas istakanin USTUNE mi birakildi? Oyleyse hangi slota.
+ *
+ * null "istakaya birakilmadi" demek ve bu bir karar: tasi ortaya geri
+ * getirip birakan oyuncu CEKMEMIS olur. Tasi eline alan, fikrini
+ * degistirebilmeli — cekme ancak istakaya koyunca gerceklesiyor.
+ *
+ * Pay icindeki nokta en yakin kenar slotuna yuvarlanir.
+ */
+export function istakaSlotuBul(
+  nokta: Nokta,
+  izgara: Dikdortgen,
+  olcu: IzgaraOlcusu,
+  pay: number = ISTAKA_PAYI,
+): number | null {
+  if (!icindeMi(nokta, izgara, pay)) return null;
+  const sutun = Math.min(
+    olcu.sutunSayisi - 1,
+    Math.max(0, Math.floor((nokta.x - izgara.x) / olcu.slotEn)),
+  );
+  const satir = Math.min(
+    olcu.satirSayisi - 1,
+    Math.max(0, Math.floor((nokta.y - izgara.y) / olcu.slotBoy)),
+  );
+  return satir * olcu.sutunSayisi + sutun;
+}
+
 /** Hedefi kararli bir anahtara cevirir — olcum sozlugunun anahtari. */
 export function hedefAnahtari(hedef: Hedef): string {
   return hedef.tip === 'atik' ? 'atik' : `per:${hedef.perId}`;

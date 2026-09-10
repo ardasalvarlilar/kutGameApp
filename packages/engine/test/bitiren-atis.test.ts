@@ -69,6 +69,9 @@ describe('eli bitiren atis §8 cezasi yemez', () => {
   it('bitirmeyen isler atis hala ceza yazar — kural kalkmiyor', () => {
     const durum = durumKur({
       istakalar: { 0: [t('mavi', 8), t('sari', 2)] },
+      // Destede tas olmali: bos destede atis eli kapatir (§9 0.12) ve bu
+      // test onu degil §8 cezasini soruyor.
+      deste: [t('sari', 9)],
       yer: [yerdekiSeri],
       acmisMi: { 0: true },
     });

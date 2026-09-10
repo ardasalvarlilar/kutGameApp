@@ -69,6 +69,8 @@ export interface LobiOzellikleri {
   readonly onMasaAc: () => void;
   readonly onKatil: (kod: string) => void;
   readonly onAlistirma: () => void;
+  /** Ogreticiyi dogrudan baslatir — ilk giristeki soruyu atlayarak. */
+  readonly onOgretici: () => void;
   readonly onProfil: () => void;
 }
 
@@ -188,6 +190,7 @@ export function Lobi({
   onMasaAc,
   onKatil,
   onAlistirma,
+  onOgretici,
   onProfil,
 }: LobiOzellikleri) {
   const [kod, setKod] = useState('');
@@ -303,6 +306,15 @@ export function Lobi({
         {/* Cevrimdisi: sunucu gerekmiyor, bu yuzden `bagli` sartina bakmiyor.
             Baglanti yokken calisan tek giris bu. */}
         <AnaDugme etiket={t('lobi.alistirma')} onBas={onAlistirma} tur="cizgi" />
+        {/* Ogretici yalnizca ilk alistirmada soruluyor; kaciran ya da fikri
+            degisen buradan dogrudan baslatiyor. Ayarlar yerine burada cunku
+            ogrenmek isteyen once bu dugmeye bakiyor. */}
+        <Text style={stil.ogreticiIpucu}>
+          {t('lobi.ogreticiIpucu')}{' '}
+          <Text style={stil.ogreticiBaglanti} onPress={onOgretici}>
+            {t('lobi.ogreticiBaslat')}
+          </Text>
+        </Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -416,4 +428,12 @@ const stil = StyleSheet.create({
   esit: { flex: 1 },
   katilKutu: { gap: 6, marginTop: 2 },
   ayirici: { height: 1, backgroundColor: renkler.kenar, marginVertical: 6 },
+  ogreticiIpucu: {
+    color: renkler.metinSolgun,
+    fontSize: 10,
+    lineHeight: 14,
+    textAlign: 'center',
+    marginTop: 6,
+  },
+  ogreticiBaglanti: { color: renkler.vurgu, fontWeight: '800' },
 });

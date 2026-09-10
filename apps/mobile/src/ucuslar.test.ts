@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { normalTas, type OyuncuId, type TasHareketi } from '@kut/engine';
-import { hareketUcuslari, type UcusOrtami } from './ucuslar';
+import { hareketUcuslari, ucanTasIdleri, type UcusOrtami } from './ucuslar';
 
 const mavi8 = normalTas('mavi', 8, 'a');
 const kirmizi9 = normalTas('kirmizi', 9, 'a');
@@ -113,3 +113,36 @@ describe('hareketUcuslari — sira', () => {
     expect(hareketUcuslari([], ORTAM)).toHaveLength(0);
   });
 });
+
+// Ekran son durumu HEMEN ciziyor, ucuslar kuyrukta sirayla oynuyor. Bir sirada
+// birden fazla hamle varsa (ac + at) atilan tas kendi ucusu baslamadan yiginin
+// ustunde beliriyor, sonra acma animasyonu oynuyor, en sonda tas zaten durdugu
+// yere bir kez daha "geliyordu". Varis yerinin havadaki tasi gizlemesi icin bu.
+describe('ucanTasIdleri', () => {
+  it('kuyruktaki taslarin kimliklerini veriyor', () => {
+    const ucuslar = hareketUcuslari(
+      [
+        { sira: 1, tip: 'atma', oyuncu: 0, tas: mavi8 },
+        { sira: 2, tip: 'atma', oyuncu: 1, tas: kirmizi9 },
+      ],
+      ORTAM,
+    );
+    const idler = ucanTasIdleri(ucuslar);
+    expect(idler.has(mavi8.id)).toBe(true);
+    expect(idler.has(kirmizi9.id)).toBe(true);
+  });
+
+  it('kuyruk bosalinca hicbir tas havada degil — tas varis yerinde belirir', () => {
+    expect(ucanTasIdleri([]).size).toBe(0);
+  });
+
+  // Kapali ucan tasin kimligi zaten gorunmuyor (motor kurali #3).
+  it('kapali ucan tas kimlik uretmiyor', () => {
+    const ucuslar = hareketUcuslari(
+      [{ sira: 1, tip: 'cekim', oyuncu: 0, kaynak: 'deste', tas: null, kimden: null }],
+      ORTAM,
+    );
+    expect(ucanTasIdleri(ucuslar).size).toBe(0);
+  });
+});
+

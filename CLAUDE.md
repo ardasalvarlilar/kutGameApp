@@ -388,10 +388,31 @@ Arayüz **landscape**'e kilitli (Okey 101 Plus düzeni):
 - **Atık yığınları ortada** tek bir öbekte toplanır; her yığın sahibinin
   oturduğu yöne doğru kaydırılır, alınabilecek olan çerçevelenir. Yanında
   deste sembolü ve kalan taş sayısı vardır
-- Taşı **yukarı sürükleyerek** atarsın; ortadaki yığından ya da desteden
-  **aşağı sürükleyerek** çekersin. Atma ve çekme masada uçan taşla canlanır.
-  Bunların ayrı `ÇEK` / `YERDEN AL` / `AT` düğmesi **yoktur** — hareket
-  yeterli, düğme yan paneli şişiriyordu
+- Atmak da **fiziksel bir sürükleme**: taşı ıstakadan alıp masanın üstünde
+  gezdirirsin. Yığına bırakırsan atılır, bir pere bırakırsan işlenir,
+  ıstakaya geri bırakırsan bıraktığın slota oturur; başka yere bırakırsan
+  (ya da sıra sende değilse, hamle reddedilirse) taş kendi slotuna kayarak
+  döner. Eskiden sürüklenen taş ıstakanın kendi kutusunda çiziliyordu ve o
+  kutu (`overflow: hidden`) onu kırptığı için masaya çıkınca gözden
+  kayboluyordu; bırakınca da koltuktan ayrıca uçuyordu. Artık ortadan
+  çekmeyle aynı üst katmanda çiziliyor ve kendi `atma`/`isleme` uçuşu
+  oynatılmıyor
+- Çekmek de **fiziksel bir sürükleme**:
+  taşı desteden ya da öbekten parmakla alıp ıstakana götürürsün, ıstakadaki
+  taşları taşır gibi. Çekme ancak taş **ıstakanın üstüne** bırakılınca oluyor
+  ve taş **bırakıldığı slota** giriyor (`duzen.ts` `slotaYerlestir`; dolu
+  slotta komşular aynı sırada en yakın boşluğa kayar). Ortaya geri bırakan
+  fikrini değiştirmiş sayılır — taş yerine döner, hiçbir şey olmaz. Dokunmak
+  tek başına çekmez. Eskiden aşağı "fırlatmak" yetiyordu ve taş ıstakanın
+  sonunda beliriyordu; oyuncu ne vazgeçebiliyor ne yerini seçebiliyordu.
+  Sürüklenen taş ekranın en üst katmanında çiziliyor (masa ile ıstaka ayrı
+  kutular); sürükleyerek çektiğin taşın `cekim` uçuşu oynatılmıyor, taş
+  zaten elinle geldi. Ayrı `ÇEK` / `YERDEN AL` / `AT` düğmesi **yoktur**
+- Üstteki taş havadayken (atma uçuşu) ya da parmaktayken öbekte **altındaki**
+  taş çiziliyor, gri yer tutucu değil. Projeksiyon alttakini vermiyor
+  (KURALLAR.md §10.3) ve vermemeli; ekran onu oyuncunun gördüğü hareketlerden
+  kuruyor (`src/atikBellegi.ts`). Motorun listesi 8 hareket tuttuğu için
+  `Masa` gördüklerini ayrıca biriktiriyor
 - **Bütün taş animasyonları motorun hareket listesinden sürülüyor**
   (`OyunDurumu.sonHareketler`, `src/ucuslar.ts`). Dört tür hareket var:
   `cekim` (ortadan oyuncuya), `atma` (oyuncudan ortaya), `isleme` (oyuncudan

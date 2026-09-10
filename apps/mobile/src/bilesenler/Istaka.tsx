@@ -1,7 +1,8 @@
-import { useMemo, useRef, useState } from 'react';
-import { Animated, PanResponder, StyleSheet, Text, View } from 'react-native';
+import { useMemo, useRef } from 'react';
+import { PanResponder, StyleSheet, Text, View } from 'react-native';
 import type { Tas, TasId } from '@kut/engine';
 import { SATIR_SAYISI, type Duzen } from '../duzen';
+import type { Nokta } from '../hedefler';
 import { renkler } from '../tema';
 import { OLCULER } from '../olculer';
 import { TasGorseli } from './TasGorseli';
@@ -33,10 +34,28 @@ interface Ozellikler {
    * (pageX/pageY); hangi hedefe dustugune App karar veriyor — atik obegi mi,
    * yerdeki bir per mi (src/hedefler.ts).
    */
-  readonly onDisariBirak: (tasId: TasId, nokta: { readonly x: number; readonly y: number }) => void;
-  /** Surukleme basladi — App bu anda hedeflerin konumunu olcuyor. */
-  readonly onSuruklemeBasladi: () => void;
+  readonly onDisariBirak: (tasId: TasId, nokta: Nokta) => void;
+  /**
+   * Tas ele alindi. `kose` tasin slotunun EKRANDAKI sol ust kosesi: Masa
+   * tasi en ustteki katmanda, parmagin tuttugu yerden tasiyor.
+   */
+  readonly onSuruklemeBasladi: (tasId: TasId, nokta: Nokta, kose: Nokta) => void;
+  readonly onSuruklemeHareket: (nokta: Nokta) => void;
+  /** Tas istakanin icinde birakildi; yerini `onTasiTasi` degistirdi. */
+  readonly onIstakadaBirakti: () => void;
+  /** Hareketi sistem kesti — tas slotuna donmeli. */
+  readonly onSuruklemeIptal: () => void;
+  /**
+   * Su an parmakta (ya da masaya birakilmis, hamlenin sonucunu bekleyen) tas.
+   * Slotunda CIZILMIYOR: gercek istakada tasi aldiginda yeri bos kalir.
+   */
+  readonly tasinanTasId: TasId | null;
   readonly onOlcum: (genislik: number) => void;
+  /**
+   * Izgaranin kendisi — Masa, ortadan suruklenen tasin istakaya birakilip
+   * birakilmadigini ve hangi slota dustugunu bununla olcuyor.
+   */
+  readonly izgaraRef?: (gorunum: View | null) => void;
 }
 
 /** Bu kadar yukari suruklenirse tas masaya atiliyor sayilir. */
@@ -52,6 +71,11 @@ const MASAYA_ESIGI = 26;
  * Bolmeler ayri bir alanda degil, izgaradaki BOSLUKLARLA belli oluyor:
  * bitisik duran taslar bir per adayi sayiliyor. Taslar suruklenebilir,
  * boylece oyuncu kendi serisini/kutunu istedigi gibi kurabiliyor.
+ *
+ * Suruklenen tas BURADA cizilmiyor, Masa'nin en ustteki katmaninda
+ * ciziliyor. Eskiden buradaydi ve istakanin kutusu (`overflow: hidden`)
+ * onu kirpiyordu: tas istakadan cikar cikmaz gozden kayboluyordu, oyuncu
+ * masanin ustunde neyi nereye goturdugunu goremiyordu.
  */
 export function Istaka({
   taslar,
@@ -65,13 +89,13 @@ export function Istaka({
   onTasiTasi,
   onDisariBirak,
   onSuruklemeBasladi,
+  onSuruklemeHareket,
+  onIstakadaBirakti,
+  onSuruklemeIptal,
+  tasinanTasId,
   onOlcum,
+  izgaraRef,
 }: Ozellikler) {
-  const [surukleme, setSurukleme] = useState<{ readonly tasId: TasId; readonly kaynak: number } | null>(
-    null,
-  );
-  const konum = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
-  const izgaraRef = useRef<View>(null);
   const kokRef = useRef({ x: 0, y: 0 });
   const basimRef = useRef({ kaynak: -1, tasId: null as TasId | null, hareket: false });
 
@@ -87,6 +111,11 @@ export function Istaka({
       const satir = Math.min(SATIR_SAYISI - 1, Math.max(0, Math.floor(y / SLOT_BOY)));
       return satir * sutunSayisi + sutun;
     };
+    /** Slotun ekrandaki sol ust kosesi. */
+    const slotKosesi = (slot: number): Nokta => ({
+      x: kokRef.current.x + (slot % sutunSayisi) * SLOT_EN,
+      y: kokRef.current.y + Math.floor(slot / sutunSayisi) * SLOT_BOY,
+    });
 
     return PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -103,27 +132,25 @@ export function Istaka({
 
         const kaynak = slotIndeksi(yerelX, yerelY);
         basimRef.current = { kaynak, tasId: duzen[kaynak] ?? null, hareket: false };
-        konum.setValue({ x: 0, y: 0 });
       },
-      onPanResponderMove: (_olay, hareket) => {
+      onPanResponderMove: (olay, hareket) => {
         const basim = basimRef.current;
-        if (
-          !basim.hareket &&
-          (Math.abs(hareket.dx) > SURUKLEME_ESIGI || Math.abs(hareket.dy) > SURUKLEME_ESIGI)
-        ) {
-          basim.hareket = true;
-          if (basim.tasId !== null) {
-            setSurukleme({ tasId: basim.tasId, kaynak: basim.kaynak });
-            // Hedeflerin ekrandaki yeri masa doldukca kayiyor; tam bu anda
-            // olculuyor ki birakirken guncel olsun.
-            onSuruklemeBasladi();
+        if (basim.tasId === null) return;
+        const nokta = { x: olay.nativeEvent.pageX, y: olay.nativeEvent.pageY };
+        if (!basim.hareket) {
+          if (
+            Math.abs(hareket.dx) <= SURUKLEME_ESIGI &&
+            Math.abs(hareket.dy) <= SURUKLEME_ESIGI
+          ) {
+            return;
           }
+          basim.hareket = true;
+          onSuruklemeBasladi(basim.tasId, nokta, slotKosesi(basim.kaynak));
         }
-        if (basim.hareket) konum.setValue({ x: hareket.dx, y: hareket.dy });
+        onSuruklemeHareket(nokta);
       },
       onPanResponderRelease: (olay, hareket) => {
         const basim = basimRef.current;
-        setSurukleme(null);
         if (basim.tasId === null) return;
 
         // Ara hareket olayi hic gelmemis olabilir (hizli surukleme, olay
@@ -134,30 +161,49 @@ export function Istaka({
           onTas(basim.tasId);
           return;
         }
-        const x = olay.nativeEvent.pageX - kokRef.current.x;
-        const y = olay.nativeEvent.pageY - kokRef.current.y;
+        const birakma = { x: olay.nativeEvent.pageX, y: olay.nativeEvent.pageY };
+        if (!basim.hareket) {
+          onSuruklemeBasladi(
+            basim.tasId,
+            { x: birakma.x - hareket.dx, y: birakma.y - hareket.dy },
+            slotKosesi(basim.kaynak),
+          );
+        }
+        basim.hareket = false;
+
+        const x = birakma.x - kokRef.current.x;
+        const y = birakma.y - kokRef.current.y;
 
         // Istakanin ustune, masaya dogru surukleme: hedefi App bulsun.
         if (y < -MASAYA_ESIGI) {
-          onDisariBirak(basim.tasId, {
-            x: olay.nativeEvent.pageX,
-            y: olay.nativeEvent.pageY,
-          });
+          onDisariBirak(basim.tasId, birakma);
           return;
         }
         onTasiTasi(basim.kaynak, slotIndeksi(x, y));
+        onIstakadaBirakti();
       },
       // Surukleme basladiktan sonra responder'i kimseye devretme. Aksi halde
       // ust bilesenler devralip release'i hic tetiklemiyor, tas yerine oturmuyor.
       onPanResponderTerminationRequest: () => false,
       onShouldBlockNativeResponder: () => true,
-      onPanResponderTerminate: () => setSurukleme(null),
+      onPanResponderTerminate: () => {
+        const basim = basimRef.current;
+        if (!basim.hareket) return;
+        basim.hareket = false;
+        onSuruklemeIptal();
+      },
     });
-  }, [duzen, sutunSayisi, onTas, onTasiTasi, onDisariBirak, onSuruklemeBasladi, konum]);
-
-  const surukleyenSatir = surukleme === null ? 0 : Math.floor(surukleme.kaynak / sutunSayisi);
-  const surukleyenSutun = surukleme === null ? 0 : surukleme.kaynak % sutunSayisi;
-  const surukleyenTas = surukleme === null ? undefined : tasHaritasi.get(surukleme.tasId);
+  }, [
+    duzen,
+    sutunSayisi,
+    onTas,
+    onTasiTasi,
+    onDisariBirak,
+    onSuruklemeBasladi,
+    onSuruklemeHareket,
+    onIstakadaBirakti,
+    onSuruklemeIptal,
+  ]);
 
   return (
     <View style={stil.govde}>
@@ -177,7 +223,7 @@ export function Istaka({
         ))}
 
         {duzen.map((tasId, indeks) => {
-          if (tasId === null) return null;
+          if (tasId === null || tasId === tasinanTasId) return null;
           const tas = tasHaritasi.get(tasId);
           if (tas === undefined) return null;
           const satir = Math.floor(indeks / sutunSayisi);
@@ -190,7 +236,6 @@ export function Istaka({
               <TasGorseli
                 tas={tas}
                 secili={secili.includes(tasId)}
-                soluk={surukleme?.tasId === tasId}
                 isler={islerTaslar.includes(tasId)}
                 okeyeYarar={okeyeYarayanlar.includes(tasId)}
                 bitirir={bitirenler.includes(tasId)}
@@ -198,28 +243,6 @@ export function Istaka({
             </View>
           );
         })}
-
-        {surukleme !== null && surukleyenTas !== undefined ? (
-          <Animated.View
-            style={[
-              stil.yuva,
-              stil.surukleniyor,
-              {
-                left: surukleyenSutun * SLOT_EN,
-                top: surukleyenSatir * SLOT_BOY,
-                transform: konum.getTranslateTransform(),
-              },
-            ]}
-          >
-            <TasGorseli
-              tas={surukleyenTas}
-              secili={secili.includes(surukleme.tasId)}
-              isler={islerTaslar.includes(surukleme.tasId)}
-              okeyeYarar={okeyeYarayanlar.includes(surukleme.tasId)}
-              bitirir={bitirenler.includes(surukleme.tasId)}
-            />
-          </Animated.View>
-        ) : null}
 
         {duzen.every((slot) => slot === null) ? (
           <Text style={stil.bos}>Istaka boş</Text>
@@ -245,6 +268,5 @@ const stil = StyleSheet.create({
   olukIsik: { height: 1, backgroundColor: renkler.ahsapAcik, opacity: 0.55 },
   olukGolge: { flex: 1, backgroundColor: renkler.ahsapKoyu },
   yuva: { position: 'absolute', pointerEvents: 'none' },
-  surukleniyor: { zIndex: 10, elevation: 6, opacity: 0.92 },
   bos: { color: renkler.ahsapKoyu, fontStyle: 'italic', alignSelf: 'center', marginTop: 24 },
 });

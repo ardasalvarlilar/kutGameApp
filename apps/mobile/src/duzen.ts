@@ -177,6 +177,56 @@ export function tasiTasi(duzen: Duzen, kaynak: number, hedef: number): Duzen {
   return sonuc;
 }
 
+/**
+ * Ortadan cekilen tasi oyuncunun BIRAKTIGI slota koyar.
+ *
+ * `duzenTazele` yeni tasi sona yerlestiriyor; oyuncu ise tasi istakanin
+ * belli bir yerine surukleyip biraktı. Bu fonksiyon onu oradan alip hedefe
+ * tasiyor.
+ *
+ * Hedef doluysa `tasiTasi` gibi YER DEGISTIRMIYOR: yer degistirmede oradaki
+ * tas, yeni tasin geldigi yere — istakanin sonuna — savrulurdu ve oyuncu
+ * "benim tasim nereye gitti" diye arardi. Onun yerine taslar AYNI SATIRDA en
+ * yakin bosluga dogru birer kayiyor (once saga, yer yoksa sola); gercek
+ * istakada taslari itip araya tas sokmak gibi.
+ *
+ * Satir tamamen doluysa tas `duzenTazele`nin koydugu yerde kalir. Tas
+ * duzende yoksa (henuz gelmemis) duzen aynen doner.
+ */
+export function slotaYerlestir(
+  duzen: Duzen,
+  tasId: TasId,
+  hedef: number,
+  sutunSayisi: number,
+): Duzen {
+  const mevcut = duzen.indexOf(tasId);
+  if (mevcut === -1 || mevcut === hedef || hedef < 0 || hedef >= duzen.length) return duzen;
+
+  const sonuc = [...duzen];
+  sonuc[mevcut] = null;
+  if (sonuc[hedef] === null) {
+    sonuc[hedef] = tasId;
+    return sonuc;
+  }
+
+  const satirBasi = Math.floor(hedef / sutunSayisi) * sutunSayisi;
+  const satirSonu = satirBasi + sutunSayisi - 1;
+
+  for (let bos = hedef + 1; bos <= satirSonu; bos++) {
+    if (sonuc[bos] !== null) continue;
+    for (let i = bos; i > hedef; i--) sonuc[i] = sonuc[i - 1] ?? null;
+    sonuc[hedef] = tasId;
+    return sonuc;
+  }
+  for (let bos = hedef - 1; bos >= satirBasi; bos--) {
+    if (sonuc[bos] !== null) continue;
+    for (let i = bos; i < hedef; i++) sonuc[i] = sonuc[i + 1] ?? null;
+    sonuc[hedef] = tasId;
+    return sonuc;
+  }
+  return duzen;
+}
+
 /** Secili taslari kendi grubuna ayirir; diger gruplarin duzeni korunur. */
 export function ayir(duzen: Duzen, secili: readonly TasId[], sutunSayisi: number): Duzen {
   if (secili.length === 0) return duzen;

@@ -1,24 +1,47 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { PanResponder, StyleSheet, Text, View } from 'react-native';
 import type { ComponentRef } from 'react';
-import type { OyuncuGorunumu } from '@kut/engine';
+import type { OyuncuGorunumu, Tas } from '@kut/engine';
 import { renkler } from '../tema';
 import { KATMAN_KAYMASI, KATMAN_SINIRI, OLCULER, ORTA_ARASI } from '../olculer';
+import type { Nokta } from '../hedefler';
 import { KapaliTas, TasGorseli } from './TasGorseli';
 
 // Obegin altinda kac katman gorunsun (KATMAN_SINIRI) ve aradaki bosluk
 // src/olculer.ts'te: merkezin en az eni bu sayilardan hesaplaniyor.
 const TAS = OLCULER.orta;
 
-/** Asagi dogru bu kadar suruklenirse tas istakaya cekiliyor sayilir. */
-const ISTAKAYA_ESIGI = 22;
+/** Parmak bu kadar kaydiysa tas ele alinmis sayilir — istakadaki esikle ayni. */
+const SURUKLEME_ESIGI = 5;
 
-interface Ozellikler {
+/** Deste kutusunda tasin sol ust kosesi: kenar (1) + dolgu (3). */
+const DESTE_OFSETI: Nokta = { x: 4, y: 4 };
+/** Obegin kenar kalinligi — ustteki tas bunun icinde basliyor. */
+const OBEK_KENARI = 2;
+
+export type CekmeKaynagi = 'deste' | 'atik';
+
+/**
+ * Ortadan tas cekme hareketinin olaylari. Karari Masa veriyor: tasin
+ * istakanin ustune birakilip birakilmadigini yalnizca o biliyor.
+ */
+export interface CekmeOlaylari {
+  /**
+   * Tas ele alindi. `tutus` parmagin TASIN sol ust kosesine gore yeri — tas
+   * parmagin altinda, tutuldugu yerden tasiniyor.
+   */
+  readonly onCekmeBasla: (kaynak: CekmeKaynagi, nokta: Nokta, tutus: Nokta) => void;
+  /** Nokta EKRAN koordinati (pageX/pageY). */
+  readonly onCekmeHareket: (nokta: Nokta) => void;
+  readonly onCekmeBirak: (nokta: Nokta) => void;
+  /** Hareketi sistem kesti (gelen arama vb.) — tas yerine donmeli. */
+  readonly onCekmeIptal: () => void;
+}
+
+interface Ozellikler extends CekmeOlaylari {
   readonly gorunum: OyuncuGorunumu;
   /** Obegin ustundeki tas su an bedelsiz alinabilir mi? */
   readonly alinabilir: boolean;
-  readonly onYerdenAl: () => void;
-  readonly onDesteden: () => void;
   readonly cekilebilir: boolean;
   /**
    * Atik obeginin ekrandaki yerini olcmek icin. Tas suruklerken oyuncunun
@@ -26,26 +49,102 @@ interface Ozellikler {
    * obek masa doldukca kaydigi icin sabit bir esik yetmiyor.
    */
   readonly obekRef?: (gorunum: ComponentRef<typeof View> | null) => void;
+  /**
+   * Ustteki tas su an obekte DEGIL mi — havada (ucus kuyrugunda) ya da
+   * oyuncunun parmaginda? Oyleyse obek o tas hic atilmamis gibi ciziliyor:
+   * bir eksik adet ve ustte ALTINDAKI tas.
+   */
+  readonly ustTasGizli?: boolean;
+  /**
+   * Ustteki tasin altindaki tas — bilinmiyorsa null (src/atikBellegi.ts).
+   * Yalnizca `ustTasGizli` iken cizilir; projeksiyonda yok (KURALLAR.md §10.3).
+   */
+  readonly altindaki?: Tas | null;
 }
 
 /**
- * Hem dokunusu hem "asagi surukle" hareketini kabul eden tutamak.
- * Oyuncu tasi istakasina dogru cekerek de alabiliyor.
+ * Tasi ortadan parmakla alip goturmeye yarayan tutamak.
+ *
+ * Dokunus tek basina bir sey yapmiyor: cekme, tas istakanin ustune
+ * birakilinca oluyor. Eskiden dokunmak ya da asagi "firlatmak" yetiyordu;
+ * tas istakanin sonunda beliriyordu ve oyuncu fikrini degistiremiyordu.
+ *
+ * Hareketin durumu REF'te: `aktif` ya da ofset surukleme sirasinda
+ * degisirse (obekteki tas gizlenince katman sayisi azaliyor) PanResponder
+ * yeniden kuruluyor ve yenisi hareketin ortasinda devraliyor. Durum
+ * closure'da kalsaydi birakma "baslamamis" sayilir, tas ekranda asili kalirdi.
  */
-function useCekmeTutamagi(aktif: boolean, tetikle: () => void) {
+function useCekmeTutamagi(
+  aktif: boolean,
+  kaynak: CekmeKaynagi,
+  tasOfseti: Nokta,
+  olaylar: CekmeOlaylari,
+) {
+  const olayRef = useRef(olaylar);
+  olayRef.current = olaylar;
+  const hareketRef = useRef({ basladi: false, tutus: { x: 0, y: 0 } as Nokta });
+
   return useMemo(
     () =>
       PanResponder.create({
         onStartShouldSetPanResponder: () => aktif,
         onMoveShouldSetPanResponder: () => aktif,
+        onPanResponderGrant: (olay) => {
+          const { locationX, locationY } = olay.nativeEvent;
+          hareketRef.current = {
+            basladi: false,
+            tutus: {
+              x: Math.min(TAS.en, Math.max(0, (locationX ?? 0) - tasOfseti.x)),
+              y: Math.min(TAS.boy, Math.max(0, (locationY ?? 0) - tasOfseti.y)),
+            },
+          };
+        },
+        onPanResponderMove: (olay, hareket) => {
+          const durum = hareketRef.current;
+          const nokta = { x: olay.nativeEvent.pageX, y: olay.nativeEvent.pageY };
+          if (!durum.basladi) {
+            if (
+              Math.abs(hareket.dx) <= SURUKLEME_ESIGI &&
+              Math.abs(hareket.dy) <= SURUKLEME_ESIGI
+            ) {
+              return;
+            }
+            durum.basladi = true;
+            olayRef.current.onCekmeBasla(kaynak, nokta, durum.tutus);
+          }
+          olayRef.current.onCekmeHareket(nokta);
+        },
+        onPanResponderRelease: (olay, hareket) => {
+          const durum = hareketRef.current;
+          const birakma = { x: olay.nativeEvent.pageX, y: olay.nativeEvent.pageY };
+          if (!durum.basladi) {
+            // Ara hareket olayi hic gelmemis olabilir (hizli surukleme, olay
+            // birlestirme) — istakadaki gibi birakma anindaki mesafeye de
+            // bakiliyor. Yoksa hizli bir cekis "vazgecti" sayilirdi.
+            const uzaklasti =
+              Math.abs(hareket.dx) > SURUKLEME_ESIGI || Math.abs(hareket.dy) > SURUKLEME_ESIGI;
+            if (!uzaklasti) return; // Dokunus: cekme yok.
+            olayRef.current.onCekmeBasla(
+              kaynak,
+              { x: birakma.x - hareket.dx, y: birakma.y - hareket.dy },
+              durum.tutus,
+            );
+          }
+          durum.basladi = false;
+          olayRef.current.onCekmeBirak(birakma);
+        },
+        // Surukleme basladiktan sonra responder'i kimseye devretme; aksi halde
+        // birakma hic gelmiyor ve tas havada kaliyor.
         onPanResponderTerminationRequest: () => false,
-        onPanResponderRelease: (_olay, hareket) => {
-          if (!aktif) return;
-          const dokunus = Math.abs(hareket.dx) < 6 && Math.abs(hareket.dy) < 6;
-          if (dokunus || hareket.dy > ISTAKAYA_ESIGI) tetikle();
+        onShouldBlockNativeResponder: () => true,
+        onPanResponderTerminate: () => {
+          const durum = hareketRef.current;
+          if (!durum.basladi) return;
+          durum.basladi = false;
+          olayRef.current.onCekmeIptal();
         },
       }).panHandlers,
-    [aktif, tetikle],
+    [aktif, kaynak, tasOfseti.x, tasOfseti.y],
   );
 }
 
@@ -57,12 +156,35 @@ function useCekmeTutamagi(aktif: boolean, tetikle: () => void) {
  * atilan tas ustte. Bu gorsel bir sadelestirme degil, kurala da uyuyor:
  * §5 geregi zaten yalnizca en usttteki tas alinabilir, altindakiler oludur.
  */
-export function Orta({ gorunum, alinabilir, onYerdenAl, onDesteden, cekilebilir, obekRef }: Ozellikler) {
-  const desteTutamagi = useCekmeTutamagi(cekilebilir, onDesteden);
-  const obekTutamagi = useCekmeTutamagi(alinabilir, onYerdenAl);
+export function Orta({
+  gorunum,
+  alinabilir,
+  cekilebilir,
+  obekRef,
+  ustTasGizli = false,
+  altindaki = null,
+  ...olaylar
+}: Ozellikler) {
+  // Ustteki tas havadaysa ya da parmaktaysa obek, o tas hic atilmamis gibi
+  // gorunuyor. Eskiden burada gri bir kapali tas cikiyordu — oysa altta
+  // duran tasi herkes gordu ve orada durmaya devam ediyor.
+  const gizli = ustTasGizli && gorunum.atikUstu !== null;
+  const adet = gizli ? gorunum.atikAdedi - 1 : gorunum.atikAdedi;
+  // Alttaki bilinmiyorsa (hareket listesinin disinda kaldiysa) kapali tas.
+  const ustte = gizli ? altindaki : gorunum.atikUstu;
 
-  const katmanSayisi = Math.min(KATMAN_SINIRI, Math.max(0, gorunum.atikAdedi - 1));
+  const katmanSayisi = Math.min(KATMAN_SINIRI, Math.max(0, adet - 1));
   const obekYuksekligi = TAS.boy + katmanSayisi * KATMAN_KAYMASI;
+  const ustKayma = katmanSayisi * KATMAN_KAYMASI;
+
+  const desteTutamagi = useCekmeTutamagi(cekilebilir, 'deste', DESTE_OFSETI, olaylar);
+  const obekOfseti = OBEK_KENARI + ustKayma;
+  const obekTutamagi = useCekmeTutamagi(
+    alinabilir,
+    'atik',
+    { x: obekOfseti, y: obekOfseti },
+    olaylar,
+  );
 
   return (
     <View style={stil.govde}>
@@ -78,7 +200,7 @@ export function Orta({ gorunum, alinabilir, onYerdenAl, onDesteden, cekilebilir,
         {...obekTutamagi}
         style={[
           stil.obek,
-          { width: TAS.en + katmanSayisi * KATMAN_KAYMASI, height: obekYuksekligi },
+          { width: TAS.en + ustKayma, height: obekYuksekligi },
           alinabilir && stil.obekAlinabilir,
         ]}
       >
@@ -90,29 +212,19 @@ export function Orta({ gorunum, alinabilir, onYerdenAl, onDesteden, cekilebilir,
           />
         ))}
 
-        {gorunum.atikUstu !== null ? (
-          <View
-            style={[
-              stil.ustTas,
-              { left: katmanSayisi * KATMAN_KAYMASI, top: katmanSayisi * KATMAN_KAYMASI },
-            ]}
-          >
-            <TasGorseli tas={gorunum.atikUstu} boy="orta" />
+        {ustte !== null ? (
+          <View style={[stil.ustTas, { left: ustKayma, top: ustKayma }]}>
+            <TasGorseli tas={ustte} boy="orta" />
           </View>
-        ) : gorunum.atikAdedi > 0 ? (
-          <View
-            style={[
-              stil.ustTas,
-              { left: katmanSayisi * KATMAN_KAYMASI, top: katmanSayisi * KATMAN_KAYMASI },
-            ]}
-          >
+        ) : adet > 0 ? (
+          <View style={[stil.ustTas, { left: ustKayma, top: ustKayma }]}>
             <KapaliTas boy="orta" />
           </View>
         ) : null}
 
-        {gorunum.atikAdedi > 0 ? (
+        {adet > 0 ? (
           <View style={stil.adetKutusu}>
-            <Text style={stil.adet}>{gorunum.atikAdedi}</Text>
+            <Text style={stil.adet}>{adet}</Text>
           </View>
         ) : null}
       </View>

@@ -50,6 +50,14 @@ describe('tam el — gercek dagitimdan el sonuna', () => {
     expect(hamle).toBeLessThan(500);
   });
 
+  // §9 0.12 — gercek bir elde de son hamle bir ATIS olmali: el, destenin son
+  // tasini cekenin atisiyla kapaniyor, siradakinin cekme denemesiyle degil.
+  it('el son tasi cekenin atisiyla kapanir', () => {
+    const { durum, aksiyonlar } = eliOyna(31337);
+    expect(durum.deste).toHaveLength(0);
+    expect(aksiyonlar[aksiyonlar.length - 1]?.tip).toBe('AT');
+  });
+
   it('el boyunca hicbir tas kaybolmaz ya da cogalmaz', () => {
     let durum = elBaslat({ tur: 1, baslayan: 0, tohum: 555 });
     let suAn = 0;

@@ -25,6 +25,12 @@ import { useCevrimiciMasa } from './ag/cevrimiciOyun';
 import { useKimlik } from './ag/kimlik';
 import { useCeviri } from './dil';
 import { useOyun } from './oyun';
+import { ogreticiDestesi } from './ogretici/senaryo';
+import { Ogretici } from './ogretici/Ogretici';
+import { OgreticiSorusu } from './ogretici/OgreticiSorusu';
+import { HedefSaglayici } from './ogretici/hedefKaydi';
+import { ogreticiSorulduMu, ogreticiSorulduYaz } from './ag/depo';
+import { yerTutucularOynasin, type Beklenti } from './ogretici/beklenti';
 import type { SikayetSebebi } from './ag/api';
 import { renkler } from './tema';
 
@@ -47,9 +53,40 @@ function Perde({ yazi }: { readonly yazi: string }) {
  * cagrilamaz. Ana bilesende cagirsaydik, lobideyken bile el dagitilir ve
  * yer tutucularin zamanlayicisi bosuna kosardi.
  */
-function AlistirmaMasasi({ onCik }: { readonly onCik: () => void }) {
-  const yerel = useOyun(1);
-  return <Masa surucu={yerel} onMasadanCik={onCik} />;
+function AlistirmaMasasi({
+  onCik,
+  ogretici,
+}: {
+  readonly onCik: () => void;
+  /** Ogretici acikken el karistirilmiyor: senaryo destesiyle dagitiliyor. */
+  readonly ogretici: boolean;
+}) {
+  const deste = useMemo(() => (ogretici ? ogreticiDestesi() : undefined), [ogretici]);
+  const [ogreticiAcik, setOgreticiAcik] = useState(ogretici);
+  const [beklenti, setBeklenti] = useState<Beklenti>('ileri');
+  // Masa `key` ile yeniden kuruldugu icin bu state ogretici acilirken
+  // dogru degerle basliyor; ayrica izlemeye gerek yok.
+
+  // Ogretici acikken masa duruyor; yalnizca rakibin hamlesini bekleyen
+  // adimlarda fren aciliyor (bkz. beklenti.ts).
+  const fren = ogreticiAcik
+    ? { sureDur: true, yerTutucularDursun: !yerTutucularOynasin(beklenti) }
+    : undefined;
+
+  const yerel = useOyun(1, deste, fren);
+
+  return (
+    <HedefSaglayici>
+      <Masa surucu={yerel} onMasadanCik={onCik} />
+      {ogreticiAcik ? (
+        <Ogretici
+          gorunum={yerel.gorunum}
+          onAdim={setBeklenti}
+          onBitti={() => setOgreticiAcik(false)}
+        />
+      ) : null}
+    </HedefSaglayici>
+  );
 }
 
 export function Uygulama() {
@@ -57,6 +94,10 @@ export function Uygulama() {
   const t = useCeviri();
   const oda = useCevrimiciMasa(kimlik.soket, kimlik.bagli);
   const [yanEkran, setYanEkran] = useState<YanEkran>('yok');
+  /** Alistirmaya ogreticiyle mi girilecek — depo okunana kadar `bilinmiyor`. */
+  const [ogreticiKarari, setOgreticiKarari] = useState<
+    'bilinmiyor' | 'sor' | 'ogreticili' | 'ogreticisiz'
+  >('bilinmiyor');
 
   const benimId = kimlik.oyuncu?.id ?? null;
 
@@ -167,7 +208,42 @@ export function Uygulama() {
   // Cevrimdisi masa: sunucu gerekmiyor. Baglanti yokken calisan tek yol bu ve
   // uygulamanin ne oldugunu tek basina gosterebilmesini sagliyor.
   if (yanEkran === 'alistirma') {
-    return <AlistirmaMasasi onCik={() => setYanEkran('yok')} />;
+    // Ilk aliştirmada bir kez soruluyor; cevap ne olursa olsun bir daha
+    // sorulmuyor (depo.ogreticiSorulduYaz). Fikri degisenin yolu lobideki
+    // "ÖĞRETİCİ" baglantisi — o dogrudan `ogreticili` ile giriyor.
+    if (ogreticiKarari === 'sor') {
+      return (
+        <SafeAreaView style={stil.ekran}>
+          <StatusBar hidden />
+          <OgreticiSorusu
+            onEvet={() => {
+              void ogreticiSorulduYaz();
+              setOgreticiKarari('ogreticili');
+            }}
+            onHayir={() => {
+              void ogreticiSorulduYaz();
+              setOgreticiKarari('ogreticisiz');
+            }}
+          />
+        </SafeAreaView>
+      );
+    }
+    // Depo okunana kadar masayi kurmuyoruz: `ogretici` bayragi masanin
+    // ilk elini belirliyor, sonradan degistirilemez.
+    if (ogreticiKarari === 'bilinmiyor') {
+      return (
+        <SafeAreaView style={stil.ekran}>
+          <StatusBar hidden />
+          <Perde yazi={t('uygulama.yukleniyor')} />
+        </SafeAreaView>
+      );
+    }
+    return (
+      <AlistirmaMasasi
+        onCik={() => setYanEkran('yok')}
+        ogretici={ogreticiKarari === 'ogreticili'}
+      />
+    );
   }
 
   // PROFIL. Arkadas listesindeki "KATIL" da buradan geciyor: masaya oturmayi
@@ -215,7 +291,17 @@ export function Uygulama() {
         onMasaBul={() => setYanEkran('masaBul')}
         onMasaAc={() => void oda.masaKur(true)}
         onKatil={(kod) => void oda.masayaKatil(kod)}
-        onAlistirma={() => setYanEkran('alistirma')}
+        onAlistirma={() => {
+          setYanEkran('alistirma');
+          setOgreticiKarari('bilinmiyor');
+          void ogreticiSorulduMu().then((soruldu) =>
+            setOgreticiKarari(soruldu ? 'ogreticisiz' : 'sor'),
+          );
+        }}
+        onOgretici={() => {
+          setYanEkran('alistirma');
+          setOgreticiKarari('ogreticili');
+        }}
         onProfil={() => setYanEkran('profil')}
         arkadaslar={kimlik.arkadaslar}
       />

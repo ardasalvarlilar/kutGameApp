@@ -51,18 +51,24 @@ export function PuanTablosu({
   // Mac bitmediyse geri sayim isler. Sifirlaninca sonraki ele gecilir — ama
   // yalnizca ilerletme BIZDEYSE. Cevrimici oyunda eli sunucu dagitir ve yeni
   // gorunum geldiginde bu tablo zaten kapanir.
+  //
+  // Sayac yerel bir degiskende tutuluyor ve `onSonrakiTur` aralik geri
+  // cagrisindan cagriliyor. Eskiden `setKalan`in guncelleyicisinin ICINDEN
+  // cagriliyordu: guncelleyici render sirasinda kostugu icin ust bilesenin
+  // (AlistirmaMasasi) state'i render ortasinda degisiyor, React "Cannot update
+  // a component while rendering a different component" uyarisi veriyordu.
+  // Guncelleyiciler saf olmali — StrictMode onlari iki kez kosturabiliyor ve
+  // o zaman el iki kez ilerlerdi.
   useEffect(() => {
     if (macBitti || geriSayimSn === undefined) return;
-    setKalan(geriSayimSn);
+    let kalanSn = geriSayimSn;
+    setKalan(kalanSn);
     const sayac = setInterval(() => {
-      setKalan((onceki) => {
-        if (onceki <= 1) {
-          clearInterval(sayac);
-          if (onSonrakiTur !== null) onSonrakiTur();
-          return 0;
-        }
-        return onceki - 1;
-      });
+      kalanSn -= 1;
+      setKalan(Math.max(0, kalanSn));
+      if (kalanSn > 0) return;
+      clearInterval(sayac);
+      if (onSonrakiTur !== null) onSonrakiTur();
     }, 1000);
     return () => clearInterval(sayac);
   }, [macBitti, geriSayimSn, onSonrakiTur]);
