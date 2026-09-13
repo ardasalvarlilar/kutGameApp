@@ -22,7 +22,7 @@ import {
 } from '@kut/engine';
 import { Dugme, DizmeDugmesi } from './bilesenler/Dugme';
 import { useHedef } from './ogretici/hedefKaydi';
-import { IZGARA_BOYU, Istaka, SLOT_BOY, SLOT_EN } from './bilesenler/Istaka';
+import { Istaka } from './bilesenler/Istaka';
 import { Orta, type CekmeKaynagi } from './bilesenler/Orta';
 import { KapaliTas, TasGorseli } from './bilesenler/TasGorseli';
 import { OyuncuSeridi } from './bilesenler/OyuncuSeridi';
@@ -34,6 +34,11 @@ import type { SikayetSebebi } from './ag/api';
 import { UcanTas, type Nokta, type Ucus } from './bilesenler/UcanTas';
 import { hareketUcuslari, ucanTasIdleri } from './ucuslar';
 import { atikAltindaki } from './atikBellegi';
+import {
+  BOS_SONRADAN_GELENLER,
+  sonradanGelenlerGuncelle,
+  type SonradanGelenlerDurumu,
+} from './sonradanGelenler';
 import { useCeviri, type MetinAnahtari } from './dil';
 import { hataMetni } from './hataMetinleri';
 import { gruplariKimlige, kutDiz, seriDiz } from '@kut/politika';
@@ -53,9 +58,13 @@ import {
   MERKEZ_EN_AZ,
   OLCULER,
   SUTUN_BOSLUK,
+  istakaKademesi,
+  slotBoyu,
+  slotEni,
   yanSutunEni,
   yanTasEni,
   yatayTasEni,
+  type TasBoyu,
 } from './olculer';
 import {
   anahtardanHedef,
@@ -83,6 +92,7 @@ import { renkler } from './tema';
 // degil. Cevrimici masada 2 numarali koltuga oturmus olabilirim; o yuzden
 // yerlesim sabit degil, kendi koltugumdan TURETILIYOR.
 const EN_AZ_SUTUN = 8;
+
 
 /**
  * Tur -> acilis sartinin sozluk anahtari.
@@ -205,7 +215,19 @@ export function Masa({
   const istakaHedefi = useHedef('istaka');
   const ortaHedefi = useHedef('orta');
 
-  const [sutunSayisi, setSutunSayisi] = useState(20);
+  // Istaka olcumlenmeden once makul bir varsayilan: 20 sutun, 'buyuk' kademe.
+  const [istakaOlcusu, setIstakaOlcusu] = useState<{ ad: TasBoyu; sutunSayisi: number }>({
+    ad: 'buyuk',
+    sutunSayisi: 20,
+  });
+  const [istakaGenisligi, setIstakaGenisligi] = useState(0);
+  const { ad: tasBoyuAdi, sutunSayisi } = istakaOlcusu;
+  const tasBoyu = OLCULER[tasBoyuAdi];
+  // Istaka alanina ayrilan yukseklik su anki kademeyle BIRLIKTE kuculuyor.
+  // Sabit (hep 'buyuk' kadar) tutulsaydi kademe kuculunce ahsap cerceve
+  // devasa kalip icindeki kucuk izgara "istaka icinde istaka" gibi
+  // gorunuyordu — SERİ DİZ/KÜT DİZ dugmeleri de bu yukseklige gore geriliyor.
+  const izgaraAlaniBoyu = SATIR_SAYISI * slotBoyu(tasBoyu);
   const [duzen, setDuzen] = useState<Duzen>([]);
   const [secili, setSecili] = useState<readonly TasId[]>([]);
   const [masaOlcu, setMasaOlcu] = useState({ en: 0, boy: 0 });
@@ -322,6 +344,32 @@ export function Masa({
 
   const istakam = gorunum.istakam;
 
+  // Yerdeki perler icin degil, ASIL olarak istaka kademesi kararinda
+  // (asagida) kac grup/bosluk oldugunu bilmek icin — bu yuzden burada,
+  // once tanimlaniyor. `duzen`/`sutunSayisi` degisince yeniden hesaplanir.
+  const gruplar = useMemo(() => duzenGruplari(duzen, sutunSayisi), [duzen, sutunSayisi]);
+
+  // Istaka kademesini (buyuk/orta/kucuk) tas sayisina gore secer.
+  //
+  // `duzen`i DEGISTIRMIYOR, yalnizca sutunSayisi/tasBoyu'nu gerekirse
+  // kucultur; asil yeniden yerlesim asagidaki effect'te (`duzenTazele`nin
+  // "sutunSayisi degisti" dali zaten var olan gruplari koruyarak yapiyor).
+  // `gerekliSlot`, mevcut grup sayisindan (gruplar arasi bosluklar dahil)
+  // turuyor — SERİ DİZ/KÜT DİZ ile acilan bosluklar da kapasiteden sayilir,
+  // yoksa "ekran hala dolu degil ama yer yok" durumuna dusulurdu.
+  //
+  // `gruplar.length` bagimlilik olarak yeter (`duzen` degil): bir tasi ayni
+  // grup icinde surukleyip birakmak grup sayisini degistirmiyor, kademe
+  // kararini yeniden kosturmaya gerek yok.
+  useEffect(() => {
+    if (istakaGenisligi <= 0) return;
+    const gerekliSlot = istakam.length + Math.max(0, gruplar.length - 1);
+    const yeni = istakaKademesi(istakaGenisligi, gerekliSlot, EN_AZ_SUTUN);
+    setIstakaOlcusu((onceki) =>
+      onceki.ad === yeni.ad && onceki.sutunSayisi === yeni.sutunSayisi ? onceki : yeni,
+    );
+  }, [istakaGenisligi, istakam.length, gruplar.length]);
+
   // Istaka degistiginde duzeni ve secimi hizala.
   //
   // Iki guncelleyici de DEGISIKLIK YOKSA ONCEKI DEGERI donduruyor. Cevrimici
@@ -410,6 +458,25 @@ export function Masa({
     if (arsiv.liste.length > ARSIV_SINIRI) arsiv.liste = arsiv.liste.slice(-ARSIV_SINIRI);
     return arsiv.liste.slice();
   }, [gorunum.sonHareketler, gorunum.sonHareketNo]);
+  // Sonradan gelen taslar (cektigim, caldigim, ceza tasi) — istaka ustunde
+  // kucuk gri okla isaretleniyor (src/sonradanGelenler.ts). Ayni "yeni el:
+  // numara geri gitti" yontemi burada da kullaniliyor. `ilkMi` AYRICA lazim:
+  // ilk gorunumde `sonHareketNo` da 0, ref'in baslangic degeri de 0 — "kucuk
+  // mu" testi bunu YAKALAMAZ ve elin ilk taslarinin hepsi "yeni" sanilirdi.
+  const sonradanGelenlerRef = useRef<{ durum: SonradanGelenlerDurumu; sonNo: number; ilkMi: boolean }>({
+    durum: BOS_SONRADAN_GELENLER,
+    sonNo: 0,
+    ilkMi: true,
+  });
+  const sonradanGelenler = useMemo(() => {
+    const kayit = sonradanGelenlerRef.current;
+    const yeniElMi = kayit.ilkMi || gorunum.sonHareketNo < kayit.sonNo;
+    kayit.durum = sonradanGelenlerGuncelle(kayit.durum, istakam, yeniElMi);
+    kayit.sonNo = gorunum.sonHareketNo;
+    kayit.ilkMi = false;
+    return kayit.durum;
+  }, [istakam, gorunum.sonHareketNo]);
+
   const obekAltindaki = useMemo(
     () =>
       ustTasGizli ? atikAltindaki(hareketArsivi, gorunum.atikUstu, gorunum.atikAdedi) : null,
@@ -576,7 +643,6 @@ export function Masa({
   // bir tikliyor ve bu memo o tempoda yeniden kosuyordu.
   const izin = useMemo(() => yetkiler(gorunum), [gorunum]);
   const sart = turSarti(gorunum.tur);
-  const gruplar = useMemo(() => duzenGruplari(duzen, sutunSayisi), [duzen, sutunSayisi]);
 
   const acilisGruplari = useMemo(
     () =>
@@ -586,9 +652,10 @@ export function Masa({
     [gruplar, secili],
   );
 
+  // Ham piksel eni burada saklanir; hangi kademenin (buyuk/orta/kucuk)
+  // kullanilacagina yukaridaki effect, tas sayisina bakarak karar veriyor.
   const olcumAl = useCallback((genislik: number) => {
-    const yeni = Math.max(EN_AZ_SUTUN, Math.floor(genislik / SLOT_EN));
-    setSutunSayisi((onceki) => (onceki === yeni ? onceki : yeni));
+    setIstakaGenisligi((onceki) => (onceki === genislik ? onceki : genislik));
   }, []);
 
   const tasSec = useCallback((tasId: TasId) => {
@@ -773,15 +840,17 @@ export function Masa({
       Animated.parallel([
         Animated.timing(cekmeKonumu, {
           toValue: {
-            x: orta.x - OLCULER.buyuk.en / 2 - koku.x,
-            y: orta.y - OLCULER.buyuk.boy / 2 - koku.y,
+            x: orta.x - tasBoyu.en / 2 - koku.x,
+            y: orta.y - tasBoyu.boy / 2 - koku.y,
           },
           duration: 110,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: false,
         }),
         Animated.timing(cekmeOlcegi, {
-          toValue: OLCULER.orta.en / OLCULER.buyuk.en,
+          // Istaka su an hangi kademedeyse ORADAN masa boyuna kuculuyor —
+          // sabit 'buyuk' varsayimi, kademe kuculunce yanlis oranla biterdi.
+          toValue: OLCULER.orta.en / tasBoyu.en,
           duration: 110,
           useNativeDriver: false,
         }),
@@ -797,7 +866,7 @@ export function Masa({
         cekmeyiGeriGotur();
       }, CEKME_BEKLEME_MS);
     },
-    [hedefler, izin.atabilir, at, gonder, INSAN, cekmeKonumu, cekmeOlcegi, cekmeyiGeriGotur],
+    [hedefler, izin.atabilir, at, gonder, INSAN, cekmeKonumu, cekmeOlcegi, cekmeyiGeriGotur, tasBoyu],
   );
 
   function grubuSec() {
@@ -968,8 +1037,8 @@ export function Masa({
           : istakaSlotuBul(nokta, alan, {
               sutunSayisi,
               satirSayisi: SATIR_SAYISI,
-              slotEn: SLOT_EN,
-              slotBoy: SLOT_BOY,
+              slotEn: slotEni(tasBoyu),
+              slotBoy: slotBoyu(tasBoyu),
             });
       // Surukleme surerken sira degismis olabilir (sure doldu, sunucu cekti).
       const izinli = kaynak === 'atik' ? atikAlinabilir : izin.cekebilir;
@@ -1000,17 +1069,19 @@ export function Masa({
       // Tas slotuna oturuyor ve sunucunun cevabi gelene kadar orada duruyor;
       // cevap gelince gercek tas ayni yerde beliriyor (yukaridaki effect).
       const koku = katmanKokuRef.current;
+      // Slotun konumu su anki kademeye (tasBoyu) gore; kademe kucukse
+      // slotlar da kucuk, 'buyuk' sabiti kullanilsa yanlis yere biterdi.
       Animated.timing(cekmeKonumu, {
         toValue: {
           x:
             alan.x +
-            (slot % sutunSayisi) * SLOT_EN +
-            (OLCULER.buyuk.en - OLCULER.orta.en) / 2 -
+            (slot % sutunSayisi) * slotEni(tasBoyu) +
+            (tasBoyu.en - OLCULER.orta.en) / 2 -
             koku.x,
           y:
             alan.y +
-            Math.floor(slot / sutunSayisi) * SLOT_BOY +
-            (OLCULER.buyuk.boy - OLCULER.orta.boy) / 2 -
+            Math.floor(slot / sutunSayisi) * slotBoyu(tasBoyu) +
+            (tasBoyu.boy - OLCULER.orta.boy) / 2 -
             koku.y,
         },
         duration: 90,
@@ -1027,6 +1098,7 @@ export function Masa({
     },
     [
       sutunSayisi,
+      tasBoyu,
       atikAlinabilir,
       izin.cekebilir,
       gorunum.atikUstu,
@@ -1245,17 +1317,19 @@ export function Masa({
         <View
           ref={istakaHedefi}
           collapsable={false}
-          style={[stil.altAlan, { height: IZGARA_BOYU + 22 }]}
+          style={[stil.altAlan, { height: izgaraAlaniBoyu + 22 }]}
         >
           <DizmeDugmesi ustSatir={t('masa.kutDiz')} altSatir={t('masa.diz')} aktif={istakam.length > 0} onBas={() => dizle('kut')} />
           <Istaka
             taslar={istakam}
             duzen={duzen}
             sutunSayisi={sutunSayisi}
+            tasBoyu={tasBoyu}
             secili={secili}
             islerTaslar={gorunum.islerTaslarim}
             okeyeYarayanlar={okeyeYarayanlar}
             bitirenler={bitirenler}
+            sonradanGelenler={sonradanGelenler.gelenler}
             onTas={tasSec}
             onTasiTasi={tasSurukle}
             onDisariBirak={masayaBirak}

@@ -125,6 +125,8 @@
   "lobi.masaKoduAlani": "Arkadaşının masa kodu",
   "lobi.kodlaKatil": "KODLA KATIL",
   "lobi.alistirma": "ALIŞTIRMA · ÇEVRİMDIŞI",
+  "lobi.alistirmaAciklama": "Sunucusuz, üç yer tutucuyla",
+  "lobi.seviyeKisa": "Sv. {seviye}",
   "masaBul.baslik": "MASA BUL",
   "masaBul.altBaslik": "Açık masalar — kod gerekmez, boş koltuğa otur",
   "masaBul.tazele": "TAZELE",

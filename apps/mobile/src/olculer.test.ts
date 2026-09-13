@@ -9,13 +9,17 @@ import {
   OLCULER,
   ORTA_BOSLUK,
   PER_ARASI,
+  istakaKademesi,
   perGenisligi,
+  slotBoyu,
+  slotEni,
   tasOlcusu,
   yanPerAlaniEni,
   yanSutunEni,
   yanTasEni,
   yatayTasEni,
 } from './olculer';
+import { kapasite } from './duzen';
 
 /**
  * App.tsx'in masa disinda kalan sabit kismi. Masanin eni bunlardan sonra
@@ -40,9 +44,10 @@ const CIHAZLAR = [
 ] as const;
 
 describe('tasOlcusu — oranlar', () => {
-  it('kademeler eskisiyle birebir ayni kaliyor', () => {
-    // Bu uc olcu elle yazilmisti; formule cevrildi, degerler degismemeli.
-    expect(OLCULER.buyuk).toEqual({ en: 25, boy: 35, yuvarlak: 4, yazi: 15, nokta: 4 });
+  it('kademeler bekledigimiz degerde', () => {
+    // `buyuk` bilerek 25'ten 30'a cikarildi (Okey 101 Plus'la kiyaslaninca
+    // istakadaki taslar kucuk kaliyordu); orta/kucuk degismedi.
+    expect(OLCULER.buyuk).toEqual({ en: 30, boy: 42, yuvarlak: 5, yazi: 18, nokta: 5 });
     expect(OLCULER.orta).toEqual({ en: 20, boy: 28, yuvarlak: 3, yazi: 12, nokta: 3 });
     expect(OLCULER.kucuk).toEqual({ en: 17, boy: 24, yuvarlak: 3, yazi: 10, nokta: 3 });
   });
@@ -145,5 +150,53 @@ describe('yatayTasEni — ust ve alt sirada iki uzun per yan yana', () => {
     // Sikayet: acilan perler cok yer kapliyor. Alt sira 'orta' (20) idi.
     expect(yatayTasEni(masaEni(844, 94))).toBeLessThan(OLCULER.orta.en);
     expect(yatayTasEni(masaEni(844, 94))).toBeLessThanOrEqual(EN_COK_YATAY_TAS_EN);
+  });
+});
+
+describe('istakaKademesi — istaka tas sayisina gore kademe secer', () => {
+  // slotEni(buyuk)=32, slotEni(orta)=22, slotEni(kucuk)=19.
+  // genislik=320 icin sutunSayisi: buyuk=10 (kapasite 20), orta=14 (28), kucuk=16 (32).
+  const GENISLIK = 320;
+
+  it('az taslık normal elde en buyuk kademede kalir', () => {
+    expect(istakaKademesi(GENISLIK, 18, 8)).toEqual({ ad: 'buyuk', sutunSayisi: 10 });
+  });
+
+  it('buyuk kademe sigmayinca ortaya duser', () => {
+    expect(istakaKademesi(GENISLIK, 25, 8)).toEqual({ ad: 'orta', sutunSayisi: 14 });
+  });
+
+  it('orta da sigmayinca kucuge duser', () => {
+    expect(istakaKademesi(GENISLIK, 30, 8)).toEqual({ ad: 'kucuk', sutunSayisi: 16 });
+  });
+
+  it('kucuk bile sigmiyorsa yine kucukte kalir — veri kaybi degil, en iyi cabadir', () => {
+    expect(istakaKademesi(GENISLIK, 100, 8)).toEqual({ ad: 'kucuk', sutunSayisi: 16 });
+  });
+
+  it('her kademede EN_AZ_SUTUN tabani var', () => {
+    expect(istakaKademesi(0, 4, 8)).toEqual({ ad: 'buyuk', sutunSayisi: 8 });
+  });
+
+  it('tek tek degil, kademe kademe kuculur: aradaki her tas sayisi ayni kademede kalir', () => {
+    // 20-28 slot arasi butun gerekliSlot degerleri 'orta'da sabit kalmali —
+    // sikayet ozetle buydu: "her tas caldigimda pikselleri kucultme".
+    for (let gerekliSlot = 21; gerekliSlot <= 28; gerekliSlot++) {
+      expect(istakaKademesi(GENISLIK, gerekliSlot, 8).ad).toBe('orta');
+    }
+  });
+
+  it('secilen kademenin kapasitesi mumkunse gerekliSlot`u karsilar', () => {
+    for (let gerekliSlot = 1; gerekliSlot <= 32; gerekliSlot++) {
+      const { sutunSayisi } = istakaKademesi(GENISLIK, gerekliSlot, 8);
+      expect(kapasite(sutunSayisi)).toBeGreaterThanOrEqual(Math.min(gerekliSlot, 32));
+    }
+  });
+});
+
+describe('slotEni / slotBoyu', () => {
+  it('tas olcusune sabit bosluk ekler', () => {
+    expect(slotEni(OLCULER.buyuk)).toBe(OLCULER.buyuk.en + 2);
+    expect(slotBoyu(OLCULER.buyuk)).toBe(OLCULER.buyuk.boy + 5);
   });
 });

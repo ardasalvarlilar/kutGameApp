@@ -4,14 +4,8 @@ import type { Tas, TasId } from '@kut/engine';
 import { SATIR_SAYISI, type Duzen } from '../duzen';
 import type { Nokta } from '../hedefler';
 import { renkler } from '../tema';
-import { OLCULER } from '../olculer';
+import { slotEni, slotBoyu, type TasOlcusu } from '../olculer';
 import { TasGorseli } from './TasGorseli';
-
-const TAS = OLCULER.buyuk;
-/** Slot olculeri — surukleme hedefi bunlarla hesaplanir. */
-export const SLOT_EN = TAS.en + 2;
-export const SLOT_BOY = TAS.boy + 5;
-export const IZGARA_BOYU = SATIR_SAYISI * SLOT_BOY;
 
 /** Parmak bu kadar kaydiysa dokunus degil surukleme sayilir. */
 const SURUKLEME_ESIGI = 5;
@@ -20,6 +14,8 @@ interface Ozellikler {
   readonly taslar: readonly Tas[];
   readonly duzen: Duzen;
   readonly sutunSayisi: number;
+  /** Istakanin su anki kademesi — Masa taş sayısına göre seçiyor (bkz. Masa.tsx). */
+  readonly tasBoyu: TasOlcusu;
   readonly secili: readonly TasId[];
   /** KURALLAR.md §8 — atilirsa ceza getirecek taslar; altlarina isaret konur. */
   readonly islerTaslar: readonly TasId[];
@@ -27,6 +23,11 @@ interface Ozellikler {
   readonly okeyeYarayanlar: readonly TasId[];
   /** KURALLAR.md §3 — tur 16'da atilinca eli bitiren taslar. */
   readonly bitirenler: readonly TasId[];
+  /**
+   * Elin basinda degil SONRADAN gelen taslar — cektigim, caldigim, ceza
+   * olarak aldigim (src/sonradanGelenler.ts). Ustlerine kucuk gri ok konur.
+   */
+  readonly sonradanGelenler: ReadonlySet<TasId>;
   readonly onTas: (tasId: TasId) => void;
   readonly onTasiTasi: (kaynak: number, hedef: number) => void;
   /**
@@ -81,10 +82,12 @@ export function Istaka({
   taslar,
   duzen,
   sutunSayisi,
+  tasBoyu,
   secili,
   islerTaslar,
   okeyeYarayanlar,
   bitirenler,
+  sonradanGelenler,
   onTas,
   onTasiTasi,
   onDisariBirak,
@@ -99,6 +102,12 @@ export function Istaka({
   const kokRef = useRef({ x: 0, y: 0 });
   const basimRef = useRef({ kaynak: -1, tasId: null as TasId | null, hareket: false });
 
+  // Slot olculeri tasBoyu'ndan turuyor — istaka kademe degistirdikce
+  // (Masa.tsx, tas sayisi sigmayinca) bunlar da degisir.
+  const slotEn = slotEni(tasBoyu);
+  const slotBoy = slotBoyu(tasBoyu);
+  const izgaraBoyu = SATIR_SAYISI * slotBoy;
+
   const tasHaritasi = useMemo(() => {
     const harita = new Map<TasId, Tas>();
     for (const tas of taslar) harita.set(tas.id, tas);
@@ -107,14 +116,14 @@ export function Istaka({
 
   const panResponder = useMemo(() => {
     const slotIndeksi = (x: number, y: number): number => {
-      const sutun = Math.min(sutunSayisi - 1, Math.max(0, Math.floor(x / SLOT_EN)));
-      const satir = Math.min(SATIR_SAYISI - 1, Math.max(0, Math.floor(y / SLOT_BOY)));
+      const sutun = Math.min(sutunSayisi - 1, Math.max(0, Math.floor(x / slotEn)));
+      const satir = Math.min(SATIR_SAYISI - 1, Math.max(0, Math.floor(y / slotBoy)));
       return satir * sutunSayisi + sutun;
     };
     /** Slotun ekrandaki sol ust kosesi. */
     const slotKosesi = (slot: number): Nokta => ({
-      x: kokRef.current.x + (slot % sutunSayisi) * SLOT_EN,
-      y: kokRef.current.y + Math.floor(slot / sutunSayisi) * SLOT_BOY,
+      x: kokRef.current.x + (slot % sutunSayisi) * slotEn,
+      y: kokRef.current.y + Math.floor(slot / sutunSayisi) * slotBoy,
     });
 
     return PanResponder.create({
@@ -196,6 +205,8 @@ export function Istaka({
   }, [
     duzen,
     sutunSayisi,
+    slotEn,
+    slotBoy,
     onTas,
     onTasiTasi,
     onDisariBirak,
@@ -210,13 +221,13 @@ export function Istaka({
       <View style={stil.ustKenar} />
       <View
         ref={izgaraRef}
-        style={[stil.izgara, { height: IZGARA_BOYU }]}
+        style={[stil.izgara, { height: izgaraBoyu }]}
         onLayout={(olay) => onOlcum(olay.nativeEvent.layout.width)}
         {...panResponder.panHandlers}
       >
         {/* Iki siranin oluklari — istakanin katlarini ayiran golge. */}
         {Array.from({ length: SATIR_SAYISI }, (_deger, satir) => (
-          <View key={`oluk-${satir}`} style={[stil.oluk, { top: (satir + 1) * SLOT_BOY - 5 }]}>
+          <View key={`oluk-${satir}`} style={[stil.oluk, { top: (satir + 1) * slotBoy - 5 }]}>
             <View style={stil.olukIsik} />
             <View style={stil.olukGolge} />
           </View>
@@ -231,14 +242,16 @@ export function Istaka({
           return (
             <View
               key={tasId}
-              style={[stil.yuva, { left: sutun * SLOT_EN, top: satir * SLOT_BOY }]}
+              style={[stil.yuva, { left: sutun * slotEn, top: satir * slotBoy }]}
             >
               <TasGorseli
                 tas={tas}
+                boy={tasBoyu}
                 secili={secili.includes(tasId)}
                 isler={islerTaslar.includes(tasId)}
                 okeyeYarar={okeyeYarayanlar.includes(tasId)}
                 bitirir={bitirenler.includes(tasId)}
+                sonradanGeldi={sonradanGelenler.has(tasId)}
               />
             </View>
           );

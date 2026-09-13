@@ -125,6 +125,8 @@
   "lobi.masaKoduAlani": "Your friend's table code",
   "lobi.kodlaKatil": "JOIN WITH CODE",
   "lobi.alistirma": "PRACTICE · OFFLINE",
+  "lobi.alistirmaAciklama": "No server, three placeholder players",
+  "lobi.seviyeKisa": "Lv. {seviye}",
   "masaBul.baslik": "FIND A TABLE",
   "masaBul.altBaslik": "Open tables — no code needed, just take a seat",
   "masaBul.tazele": "REFRESH",

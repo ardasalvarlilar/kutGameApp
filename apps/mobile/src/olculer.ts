@@ -11,6 +11,8 @@
 // sigmiyor, sonu kirpiliyordu. Tas eni artik masanin OLCULEN eninden
 // turetiliyor ve ortadaki deste ile atik obegine ayrilan yer korunuyor.
 
+import { kapasite } from './duzen';
+
 export type TasBoyu = 'buyuk' | 'orta' | 'kucuk';
 
 export interface TasOlcusu {
@@ -37,14 +39,67 @@ export function tasOlcusu(en: number): TasOlcusu {
 }
 
 /**
- * Taslar bilerek kucuk: calma yuzunden istakada 24+ tas olabiliyor
- * (KURALLAR.md §5) ve yere inen perler el ilerledikce cogaliyor.
+ * Uc kademe — ISTAKADA kademe olarak, digerlerinde (deste, atik, ucan tas)
+ * hep sabit boyut olarak kullaniliyor.
+ *
+ * `buyuk` istakanin NORMAL boyu: 14-16 taslik bir elde hep bu kullanilir,
+ * Okey 101 Plus'taki kadar buyuk ve net olsun diye bilerek 25'ten 30'a
+ * cikarildi. Calma yuzunden istakada 24+ tas birikince (KURALLAR.md §5)
+ * `orta`ya, o da yetmezse `kucuk`e dusuluyor — bkz. Masa.tsx'teki kademe
+ * secimi. Tas TEK TEK kuculmuyor: ya `buyuk`, ya `orta`, ya `kucuk`.
  */
 export const OLCULER: Record<TasBoyu, TasOlcusu> = {
-  buyuk: tasOlcusu(25),
+  buyuk: tasOlcusu(30),
   orta: tasOlcusu(20),
   kucuk: tasOlcusu(17),
 };
+
+/** Istaka kademe sirasi — buyukten kucuge, sigana kadar denenir. */
+export const TAS_BOYU_SIRASI: readonly TasBoyu[] = ['buyuk', 'orta', 'kucuk'];
+
+/** Bir slotun eni — tas eni + aradaki bosluk. Istaka ve surukleme burayi kullanir. */
+export function slotEni(tas: TasOlcusu): number {
+  return tas.en + 2;
+}
+
+/** Bir slotun boyu — tas boyu + aradaki bosluk. */
+export function slotBoyu(tas: TasOlcusu): number {
+  return tas.boy + 5;
+}
+
+export interface IstakaKademesi {
+  readonly ad: TasBoyu;
+  readonly sutunSayisi: number;
+}
+
+/**
+ * Istaka kademesi + o kademedeki sutun sayisi.
+ *
+ * `genislik` olculen ıstaka piksel eni, `gerekliSlot` su an sigdirilmasi
+ * gereken slot sayisi (tas sayisi + gruplar arasi bosluklar — SERİ DİZ/KÜT
+ * DİZ ile acilan bosluklar da buna dahil edilmeli, yoksa "ekran hala dolu
+ * degil ama yer yok" durumuna dusulur). Buyukten kucuge dogru dener, ilk
+ * sigani secer; hicbiri sigmiyorsa en kucukte kalir (duzenTazele o durumda
+ * bosluklari kapatip elinden geleni sigdirir — bkz. Masa.tsx).
+ *
+ * Kademe TEK TEK degil, ucer ucer degisir (KURALLAR.md disi bir UX karari):
+ * 14 taslik normal elde hep 'buyuk' kalir, ancak sigmayinca 'orta'ya, o da
+ * yetmeyince 'kucuk'e duser. Her tas calindiginda piksel piksel kuculmek
+ * hem cirkin hem de gereksiz — cogu elde hic gerekmiyor.
+ */
+export function istakaKademesi(
+  genislik: number,
+  gerekliSlot: number,
+  enAzSutun: number,
+): IstakaKademesi {
+  let sonuc: IstakaKademesi = { ad: 'buyuk', sutunSayisi: enAzSutun };
+  for (const ad of TAS_BOYU_SIRASI) {
+    const aday = Math.max(enAzSutun, Math.floor(genislik / slotEni(OLCULER[ad])));
+    sonuc = { ad, sutunSayisi: aday };
+    if (kapasite(aday) >= gerekliSlot) break;
+  }
+  return sonuc;
+}
 
 // --- Yerlesim sabitleri ------------------------------------------------------
 // Stil dosyalari bu sayilari buradan okur; tek kaynak burasi.

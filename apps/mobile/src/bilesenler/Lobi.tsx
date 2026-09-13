@@ -10,23 +10,21 @@
 //
 // --- Tasarim kararlari -------------------------------------------------------
 //
-// ONCEKI HALI bes esit dugmeydi ve her birinin altinda bir aciklama satiri
-// vardi. Sonuc: hepsi ayni derecede onemli gorunuyor, ekran metin doluyor ve
-// oyuncu "hangisi?" diye duruyordu. Yeni duzen bir HIYERARSI kuruyor:
+// Duzen bir HIYERARSI kuruyor, eskisinden farkli bir GORUNUMLE:
 //
-//   1. HIZLI OYNA tek basina, buyuk. Cogu oyuncunun istedigi bu.
-//   2. MASA BUL ve ÖZEL MASA yan yana, ikincil.
-//   3. Kodla katilma bir ALAN — dugme degil; zaten kod yazmadan basilamiyor.
-//   4. ALIŞTIRMA en altta, cizgi dugme. Sunucu yokken calisan tek yol
-//      oldugu icin duruyor ama gunluk yol degil.
+//   1. Ust bar: kimlik (avatar, ad, seviye, baglanti durumu) solda, sag
+//      tarafta AYARLAR. Jeton/bilet icin bosluk simdiden ayrilmis ama
+//      GORUNMUYOR — henuz bir ekonomi yok, yalnizca yer korunuyor.
+//   2. Sol serit: arkadas seridi (acik masasi olan arkadaslar) ve ogretici
+//      banner'i. Ikisi de tek dokunusla bir yere goturuyor.
+//   3. Orta: yatay kaydirilan renkli kartlar — MASA BUL, ÖZEL MASA,
+//      KODLA KATIL, ALIŞTIRMA. HIZLI OYNA burada degil, cunku o tek basina
+//      en onemli eylem.
+//   4. Alt bar: HIZLI OYNA tek, buyuk, ortada — cogu oyuncunun istedigi bu.
 //
-// Aciklamalar dugmelerin ICINE, ikinci satira girdi: ayni bilgi, yarisi
-// kadar dikey yer.
-//
-// SOL SUTUN artik bir kimlik panosu: avatar, ad, istatistik, arkadas kodu ve
-// ARKADASLAR seridi. Arkadas seridi burada duruyor cunku tek isi var —
-// arkadasin acik masasi varsa tek dokunusla oturmak. Kod paylasip yazmak,
-// arkadas listesinin cozmesi gereken asil zahmetti.
+// SOL SERIT hala bir kimlik panosu: arkadas seridi burada duruyor cunku tek
+// isi var — arkadasin acik masasi varsa tek dokunusla oturmak. Kod paylasip
+// yazmak, arkadas listesinin cozmesi gereken asil zahmetti.
 //
 // Acik/ozel ayrimi: yabanciyla oynamaya acik olan MASA BUL'a bakar, yalnizca
 // arkadaslariyla oynayacak olan ozel masa acip kodu paylasir. Ozel masaya
@@ -55,7 +53,7 @@ import { Avatar } from './Avatar';
 import { useCeviri } from '../dil';
 import type { ArkadasDurumu } from '../ag/api';
 import type { OyuncuOzeti } from '../ag/protokol';
-import { golge, renkler } from '../tema';
+import { golge, renkler, tasRenkleri, okeyRengi } from '../tema';
 
 export interface LobiOzellikleri {
   readonly oyuncu: OyuncuOzeti | null;
@@ -75,36 +73,57 @@ export interface LobiOzellikleri {
 }
 
 /**
- * Lobinin ana eylem dugmesi: baslik + ikinci satirda tek cumlelik aciklama.
+ * Orta siradaki renkli eylem karti: baslik + aciklama, tek dokunuslu.
  *
- * Aciklamayi dugmenin ALTINA yazmak yerine icine almak, bes dugmelik listede
- * on satir metni bese indiriyor — asil kazanc dikey yerde.
+ * `renk` yalnizca ustteki serit ve dugmeyi boyuyor — kartlar birbirinden bu
+ * sekilde ayirt ediliyor, aksi halde dort kart da ayni gri kutu olurdu.
  */
-function MasaDugmesi({
+function ModKarti({
   etiket,
   aciklama,
+  simge,
   onBas,
   aktif = true,
-  buyuk = false,
+  renk,
+  dolu = true,
 }: {
   readonly etiket: string;
   readonly aciklama: string;
+  /** Kartin ortasini dolduran buyuk, soluk sembol — resim olmadigi icin. */
+  readonly simge: string;
   readonly onBas: () => void;
   readonly aktif?: boolean;
-  readonly buyuk?: boolean;
+  readonly renk: string;
+  /** false ise dugme dolu degil, cizgili — ALIŞTIRMA gibi ikincil eylemler icin. */
+  readonly dolu?: boolean;
 }) {
   return (
     <Pressable
       onPress={aktif ? onBas : undefined}
       style={({ pressed }) => [
-        stil.eylem,
-        buyuk && stil.eylemBuyuk,
+        stil.kart,
         pressed && aktif && stil.eylemBasili,
         !aktif && stil.pasif,
       ]}
     >
-      <Text style={[stil.eylemEtiket, buyuk && stil.eylemEtiketBuyuk]}>{etiket}</Text>
-      <Text style={[stil.eylemAciklama, buyuk && stil.eylemAciklamaBuyuk]}>{aciklama}</Text>
+      <View style={[stil.kartSerit, { backgroundColor: renk }]} />
+      <View style={stil.kartGovde}>
+        <View>
+          <Text style={stil.kartBaslik}>{etiket}</Text>
+          <Text style={stil.kartAciklama}>{aciklama}</Text>
+        </View>
+        <Text style={[stil.kartSimge, { color: renk }]}>{simge}</Text>
+      </View>
+      <View
+        style={[
+          stil.kartDugme,
+          dolu ? { backgroundColor: renk } : [stil.kartDugmeCizgi, { borderColor: renk }],
+        ]}
+      >
+        <Text style={[stil.kartDugmeYazi, dolu ? stil.kartDugmeYaziDolu : { color: renk }]}>
+          {etiket}
+        </Text>
+      </View>
     </Pressable>
   );
 }
@@ -112,8 +131,8 @@ function MasaDugmesi({
 /**
  * Arkadas seridi.
  *
- * Yalnizca ACIK MASASI OLAN arkadaslar listeleniyor; "cevrimici arkadas
- * listesi" degil, "su an katilabilecegin masa" listesi. Sunucu zaten masasi
+ * Yalnizca ACIK MASASI OLAN arkadaslar listeleniyor; "kim cevrimici"
+ * degil "hangi masaya oturabilirim" sorusunu cevapliyor. Sunucu zaten masasi
  * olmayana `masaKodu: null` veriyor, karar orada (arkadasServisi).
  */
 function ArkadasSeridi({
@@ -155,7 +174,7 @@ function ArkadasSeridi({
       ) : (
         masadakiler.slice(0, 3).map((kisi) => (
           <View key={kisi.id} style={stil.arkadasSatiri}>
-            <Avatar ad={kisi.ad} boy={26} />
+            <Avatar ad={kisi.ad} boy={24} />
             <View style={stil.arkadasBilgi}>
               <Text style={stil.arkadasAd} numberOfLines={1}>
                 {kisi.ad}
@@ -203,166 +222,243 @@ export function Lobi({
       style={stil.govde}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <View style={stil.sol}>
+      {/* --- Ust bar: kimlik + ayarlar ------------------------------------- */}
+      <View style={stil.ustBar}>
         <View style={stil.marka}>
           <Text style={stil.oyunAdi}>KÜT</Text>
-          <Text style={stil.altBaslik}>{t('lobi.altBaslik')}</Text>
+          <Text style={stil.altBaslik} numberOfLines={1}>
+            {t('lobi.altBaslik')}
+          </Text>
         </View>
 
-        {/* Profil karti bir DUGME: hesap, arkadaslar ve ayarlar oraya
-            baglaniyor. Ayri bir "HESAP" dugmesi tutmaktansa, oyuncunun
-            zaten baktigi yeri tiklanabilir yapmak daha az yer kapliyor. */}
         <Pressable
           onPress={onProfil}
           style={({ pressed }) => [stil.profilKarti, pressed && stil.eylemBasili]}
         >
-          <Avatar ad={oyuncu?.ad ?? '?'} boy={44} />
+          <Avatar ad={oyuncu?.ad ?? '?'} boy={38} />
           <View style={stil.profilBilgi}>
-            <Text style={stil.ad} numberOfLines={1}>
-              {oyuncu?.ad ?? '—'}
-            </Text>
-            <Text style={stil.istatistik}>
-              {oyuncu === null
-                ? ''
-                : t('lobi.istatistik', {
-                    el: oyuncu.oynananEl,
-                    galibiyet: oyuncu.kazanilanEl,
-                  })}
-            </Text>
+            <View style={stil.profilAdSatiri}>
+              <Text style={stil.ad} numberOfLines={1}>
+                {oyuncu?.ad ?? '—'}
+              </Text>
+              {oyuncu !== null ? (
+                <View style={stil.seviyeRozeti}>
+                  <Text style={stil.seviyeYazi}>
+                    {t('lobi.seviyeKisa', { seviye: oyuncu.seviye })}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+            <View style={stil.durumSatiri}>
+              <View style={[stil.nokta, bagli ? stil.noktaAcik : stil.noktaKapali]} />
+              <Text style={stil.durumYazi}>{t(bagli ? 'lobi.bagli' : 'lobi.baglaniyor')}</Text>
+            </View>
           </View>
-          <Text style={stil.profilOk}>›</Text>
         </Pressable>
 
-        {oyuncu?.misafirMi === true ? (
-          // Misafir hesabi cihaza bagli: uygulama silinirse ilerleme gider.
-          // Bunu oyuncuya SOYLEMEK, sonradan sikayet almaktan iyi.
-          <Text style={stil.uyari}>{t('lobi.misafirUyari')}</Text>
-        ) : null}
+        <View style={stil.ustBosluk} />
 
-        <ArkadasSeridi
-          arkadaslar={arkadaslar}
-          aktif={hazir}
-          onKatil={onKatil}
-          onProfil={onProfil}
-        />
+        {/* Jeton ve bilet ekonomisi henuz yok. Yerleri simdiden ayriliyor ki
+            sonradan eklendiginde komsu ogeler kaymasin — GORUNMUYORLAR. */}
+        <View style={stil.rezerveJeton} />
+        <View style={stil.rezerveBilet} />
 
-        <View style={stil.durumSatiri}>
-          <View style={[stil.nokta, bagli ? stil.noktaAcik : stil.noktaKapali]} />
-          <Text style={stil.durumYazi}>{t(bagli ? 'lobi.bagli' : 'lobi.baglaniyor')}</Text>
-        </View>
+        <Pressable
+          onPress={onProfil}
+          hitSlop={8}
+          style={({ pressed }) => [stil.ayarlarDugmesi, pressed && stil.eylemBasili]}
+        >
+          <Text style={stil.ayarlarYazi}>⚙</Text>
+        </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={stil.sag} keyboardShouldPersistTaps="handled">
-        <MasaDugmesi
-          etiket={t('lobi.hizliOyna')}
-          aciklama={t('lobi.hizliOynaAciklama')}
-          onBas={onHizli}
-          aktif={hazir}
-          buyuk
-        />
+      {oyuncu?.misafirMi === true ? (
+        // Misafir hesabi cihaza bagli: uygulama silinirse ilerleme gider.
+        // Bunu oyuncuya SOYLEMEK, sonradan sikayet almaktan iyi.
+        <Text style={stil.uyari}>{t('lobi.misafirUyari')}</Text>
+      ) : null}
 
-        <View style={stil.ikili}>
-          <View style={stil.esit}>
-            <MasaDugmesi
-              etiket={t('lobi.masaBul')}
-              aciklama={t('lobi.masaBulAciklama')}
-              onBas={onMasaBul}
-              aktif={hazir}
-            />
-          </View>
-          <View style={stil.esit}>
-            <MasaDugmesi
-              etiket={t('lobi.ozelMasa')}
-              aciklama={t('lobi.ozelMasaAciklama')}
-              onBas={onMasaAc}
-              aktif={hazir}
-            />
-          </View>
+      {/* --- Orta: sol serit + kartlar --------------------------------------- */}
+      <View style={stil.orta}>
+        <View style={stil.sol}>
+          <ArkadasSeridi
+            arkadaslar={arkadaslar}
+            aktif={hazir}
+            onKatil={onKatil}
+            onProfil={onProfil}
+          />
+
+          <Pressable
+            onPress={onOgretici}
+            style={({ pressed }) => [stil.banner, pressed && stil.eylemBasili]}
+          >
+            <View>
+              <Text style={stil.bannerBaslik}>{t('lobi.ogreticiBaslat')}</Text>
+              <Text style={stil.bannerAciklama}>{t('lobi.ogreticiIpucu')}</Text>
+            </View>
+            <Text style={stil.bannerSimge}>📖</Text>
+          </Pressable>
         </View>
 
-        <View style={stil.katilKutu}>
-          <Alan
-            etiket={t('lobi.masaKoduAlani')}
-            value={kod}
-            onChangeText={(yazi) => setKod(yazi.toLocaleUpperCase('tr-TR'))}
-            placeholder="4F7A"
-            maxLength={8}
-            autoCapitalize="characters"
-            onSubmitEditing={kodTamam ? () => onKatil(kod) : undefined}
-            returnKeyType="go"
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={stil.kartSatiri}
+        >
+          <ModKarti
+            etiket={t('lobi.masaBul')}
+            aciklama={t('lobi.masaBulAciklama')}
+            simge="🔍"
+            onBas={onMasaBul}
+            aktif={hazir}
+            renk={tasRenkleri.mavi}
           />
-          <AnaDugme
-            etiket={t('lobi.kodlaKatil')}
-            onBas={() => onKatil(kod)}
-            aktif={hazir && kodTamam}
-            tur="sade"
+
+          <ModKarti
+            etiket={t('lobi.ozelMasa')}
+            aciklama={t('lobi.ozelMasaAciklama')}
+            simge="🔒"
+            onBas={onMasaAc}
+            aktif={hazir}
+            renk={okeyRengi}
           />
-        </View>
 
-        <Hata metin={hata} />
+          <View style={stil.katilKart}>
+            <View style={[stil.kartSerit, { backgroundColor: renkler.vurgu }]} />
+            <View style={stil.katilKartGovde}>
+              <Text style={stil.kartBaslik}>{t('lobi.kodlaKatil')}</Text>
+              <Alan
+                etiket={t('lobi.masaKoduAlani')}
+                value={kod}
+                onChangeText={(yazi) => setKod(yazi.toLocaleUpperCase('tr-TR'))}
+                placeholder="4F7A"
+                maxLength={8}
+                autoCapitalize="characters"
+                onSubmitEditing={kodTamam ? () => onKatil(kod) : undefined}
+                returnKeyType="go"
+              />
+              <AnaDugme
+                etiket={t('lobi.kodlaKatil')}
+                onBas={() => onKatil(kod)}
+                aktif={hazir && kodTamam}
+                tur="sade"
+              />
+            </View>
+          </View>
 
-        <View style={stil.ayirici} />
+          <ModKarti
+            etiket={t('lobi.alistirma')}
+            aciklama={t('lobi.alistirmaAciklama')}
+            simge="🤖"
+            onBas={onAlistirma}
+            renk={renkler.metinSolgun}
+            dolu={false}
+          />
+        </ScrollView>
+      </View>
 
-        {/* Cevrimdisi: sunucu gerekmiyor, bu yuzden `bagli` sartina bakmiyor.
-            Baglanti yokken calisan tek giris bu. */}
-        <AnaDugme etiket={t('lobi.alistirma')} onBas={onAlistirma} tur="cizgi" />
-        {/* Ogretici yalnizca ilk alistirmada soruluyor; kaciran ya da fikri
-            degisen buradan dogrudan baslatiyor. Ayarlar yerine burada cunku
-            ogrenmek isteyen once bu dugmeye bakiyor. */}
-        <Text style={stil.ogreticiIpucu}>
-          {t('lobi.ogreticiIpucu')}{' '}
-          <Text style={stil.ogreticiBaglanti} onPress={onOgretici}>
-            {t('lobi.ogreticiBaslat')}
-          </Text>
-        </Text>
-      </ScrollView>
+      <Hata metin={hata} />
+
+      {/* --- Alt bar: tek buyuk eylem ---------------------------------------- */}
+      <View style={stil.altBar}>
+        <Pressable
+          onPress={hazir ? onHizli : undefined}
+          style={({ pressed }) => [
+            stil.hizliPill,
+            pressed && hazir && stil.eylemBasili,
+            !hazir && stil.pasif,
+          ]}
+        >
+          <Text style={stil.hizliPillYazi}>{t('lobi.hizliOyna')}</Text>
+          <Text style={stil.hizliPillAlt}>{t('lobi.hizliOynaAciklama')}</Text>
+        </Pressable>
+      </View>
     </KeyboardAvoidingView>
   );
 }
 
 const stil = StyleSheet.create({
-  govde: { flex: 1, flexDirection: 'row', padding: 16, gap: 20, alignItems: 'center' },
+  govde: { flex: 1, padding: 12, gap: 8 },
 
-  // --- Sol sutun: kimlik ------------------------------------------------------
-  sol: { flex: 1, gap: 10, maxWidth: 360 },
-  marka: { alignItems: 'center', gap: 2 },
+  // --- Ust bar -----------------------------------------------------------
+  ustBar: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  marka: { alignItems: 'flex-start', gap: 0, marginRight: 4 },
   oyunAdi: {
     color: renkler.vurgu,
-    fontSize: 46,
+    fontSize: 22,
     fontWeight: '900',
-    letterSpacing: 8,
+    letterSpacing: 3,
     textShadowColor: 'rgba(0,0,0,0.35)',
-    textShadowOffset: { width: 0, height: 3 },
-    textShadowRadius: 8,
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 5,
   },
-  altBaslik: { color: renkler.metinSolgun, fontSize: 11, letterSpacing: 0.5 },
+  altBaslik: { color: renkler.metinSolgun, fontSize: 8, letterSpacing: 0.3, maxWidth: 110 },
 
   profilKarti: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
     backgroundColor: renkler.panelKoyu,
     borderWidth: 1,
     borderColor: renkler.kenar,
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    borderRadius: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
     ...golge.kart,
   },
-  profilBilgi: { flex: 1, gap: 1 },
-  profilOk: { color: renkler.metinSolgun, fontSize: 22, marginTop: -2 },
-  ad: { color: renkler.metin, fontSize: 17, fontWeight: '800' },
-  istatistik: { color: renkler.metinSolgun, fontSize: 11 },
-  uyari: { color: renkler.uyari, fontSize: 10, lineHeight: 14 },
+  profilBilgi: { gap: 2 },
+  profilAdSatiri: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  ad: { color: renkler.metin, fontSize: 13, fontWeight: '800', maxWidth: 130 },
+  seviyeRozeti: {
+    backgroundColor: renkler.vurguKoyu,
+    borderRadius: 6,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  seviyeYazi: { color: renkler.vurgu, fontSize: 9, fontWeight: '800' },
+  uyari: { color: renkler.uyari, fontSize: 10, lineHeight: 13 },
 
-  // --- Arkadas seridi ---------------------------------------------------------
-  arkadasKutu: {
-    gap: 6,
+  durumSatiri: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  nokta: { width: 6, height: 6, borderRadius: 3 },
+  noktaAcik: { backgroundColor: renkler.onay },
+  noktaKapali: { backgroundColor: renkler.uyari },
+  durumYazi: { color: renkler.metinSolgun, fontSize: 9 },
+
+  ustBosluk: { flex: 1 },
+
+  // Jeton/bilet: yer ayrilmis, icerik yok — bu yuzden gorunmez kalıyorlar.
+  rezerveJeton: { width: 78, height: 30 },
+  rezerveBilet: { width: 58, height: 30 },
+
+  ayarlarDugmesi: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: renkler.panelKoyu,
     borderWidth: 1,
     borderColor: renkler.kenar,
-    borderRadius: 14,
-    padding: 11,
+  },
+  ayarlarYazi: { color: renkler.metinSolgun, fontSize: 16 },
+
+  // --- Orta: sol serit + kartlar -------------------------------------------
+  // `alignItems: 'center'` olmasa sol serit ve kartlar `orta`nin (flex:1)
+  // butun yuksekligine gerilirdi — ekranin cogunu kaplayan devasa kutular
+  // buradan geliyordu. Kartlarin boyu artik SABIT (`kart`/`katilKart`);
+  // dikeyde ortalanmalari, ustte/altta kalan bosluk esit dagilsin diye.
+  orta: { flex: 1, flexDirection: 'row', gap: 10, alignItems: 'center' },
+
+  sol: { width: 160, gap: 6 },
+
+  arkadasKutu: {
+    gap: 5,
+    backgroundColor: renkler.panelKoyu,
+    borderWidth: 1,
+    borderColor: renkler.kenar,
+    borderRadius: 12,
+    padding: 9,
     ...golge.kart,
   },
   arkadasBaslikSatiri: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -379,61 +475,83 @@ const stil = StyleSheet.create({
     paddingVertical: 1,
   },
   rozetYazi: { color: '#2a2000', fontSize: 9, fontWeight: '900' },
-  arkadasBos: { color: renkler.metinSolgun, fontSize: 10, lineHeight: 14 },
-  arkadasSatiri: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  arkadasBos: { color: renkler.metinSolgun, fontSize: 10, lineHeight: 13 },
+  arkadasSatiri: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   arkadasBilgi: { flex: 1 },
-  arkadasAd: { color: renkler.metin, fontSize: 12, fontWeight: '700' },
-  arkadasMasa: { color: renkler.metinSolgun, fontSize: 10, letterSpacing: 0.6 },
+  arkadasAd: { color: renkler.metin, fontSize: 11, fontWeight: '700' },
+  arkadasMasa: { color: renkler.metinSolgun, fontSize: 9, letterSpacing: 0.4 },
   katilDugmesi: {
     backgroundColor: renkler.vurgu,
     borderRadius: 7,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
   },
-  katilYazi: { color: '#2a2000', fontSize: 10, fontWeight: '900', letterSpacing: 0.6 },
+  katilYazi: { color: '#2a2000', fontSize: 9, fontWeight: '900', letterSpacing: 0.4 },
 
-  durumSatiri: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  nokta: { width: 7, height: 7, borderRadius: 4 },
-  noktaAcik: { backgroundColor: renkler.onay },
-  noktaKapali: { backgroundColor: renkler.uyari },
-  durumYazi: { color: renkler.metinSolgun, fontSize: 10 },
+  banner: {
+    backgroundColor: renkler.panel,
+    borderWidth: 1,
+    borderColor: renkler.vurguKoyu,
+    borderRadius: 12,
+    padding: 8,
+    gap: 4,
+    ...golge.kart,
+  },
+  bannerBaslik: { color: renkler.vurgu, fontSize: 11, fontWeight: '900', letterSpacing: 0.4 },
+  bannerAciklama: { color: renkler.metinSolgun, fontSize: 9, lineHeight: 12 },
+  bannerSimge: { fontSize: 20, opacity: 0.5, alignSelf: 'center' },
 
-  // --- Sag sutun: oynama ------------------------------------------------------
-  sag: { width: 320, gap: 8, paddingBottom: 10 },
+  // --- Kartlar --------------------------------------------------------------
+  // Sabit yukseklik bilerek: kartlar `orta`nin (flex:1) tum boyuna degil,
+  // kendi icerigine gore boyutlaniyor — kucuk, kompakt kutular bunun icin.
+  kartSatiri: { flexDirection: 'row', gap: 8, paddingRight: 4 },
 
-  eylem: {
+  kart: {
+    width: 132,
+    height: 140,
     backgroundColor: renkler.panel,
     borderWidth: 1,
     borderColor: renkler.kenar,
-    borderRadius: 13,
-    paddingVertical: 11,
-    paddingHorizontal: 13,
-    gap: 2,
+    borderRadius: 12,
+    overflow: 'hidden',
     ...golge.kart,
   },
-  eylemBuyuk: {
-    backgroundColor: renkler.vurgu,
-    borderColor: renkler.vurgu,
-    paddingVertical: 16,
+  kartSerit: { height: 4, width: '100%' },
+  kartGovde: { flex: 1, padding: 8, justifyContent: 'space-between' },
+  kartBaslik: { color: renkler.metin, fontSize: 11, fontWeight: '900', letterSpacing: 0.3 },
+  kartAciklama: { color: renkler.metinSolgun, fontSize: 9, lineHeight: 12, marginTop: 3 },
+  kartSimge: { fontSize: 26, opacity: 0.5, alignSelf: 'center' },
+  kartDugme: { paddingVertical: 6, alignItems: 'center' },
+  kartDugmeCizgi: { backgroundColor: 'transparent', borderTopWidth: 1 },
+  kartDugmeYazi: { fontSize: 10, fontWeight: '900', letterSpacing: 0.4 },
+  kartDugmeYaziDolu: { color: '#2a2000' },
+
+  katilKart: {
+    width: 168,
+    height: 168,
+    backgroundColor: renkler.panel,
+    borderWidth: 1,
+    borderColor: renkler.kenar,
+    borderRadius: 12,
+    overflow: 'hidden',
+    ...golge.kart,
+  },
+  katilKartGovde: { padding: 8, gap: 5 },
+
+  eylemBasili: { opacity: 0.85, transform: [{ scale: 0.98 }] },
+  pasif: { opacity: 0.4 },
+
+  // --- Alt bar ----------------------------------------------------------------
+  altBar: { alignItems: 'center' },
+  hizliPill: {
+    backgroundColor: renkler.onay,
+    borderRadius: 22,
+    paddingVertical: 8,
+    paddingHorizontal: 40,
+    alignItems: 'center',
+    minWidth: 260,
     ...golge.yukseltilmis,
   },
-  eylemBasili: { opacity: 0.8, transform: [{ scale: 0.98 }] },
-  pasif: { opacity: 0.4 },
-  eylemEtiket: { color: renkler.metin, fontSize: 13, fontWeight: '800', letterSpacing: 0.6 },
-  eylemEtiketBuyuk: { color: '#2a2000', fontSize: 19, fontWeight: '900', letterSpacing: 1.2 },
-  eylemAciklama: { color: renkler.metinSolgun, fontSize: 10 },
-  eylemAciklamaBuyuk: { color: '#5a4712', fontSize: 11 },
-
-  ikili: { flexDirection: 'row', gap: 8 },
-  esit: { flex: 1 },
-  katilKutu: { gap: 6, marginTop: 2 },
-  ayirici: { height: 1, backgroundColor: renkler.kenar, marginVertical: 6 },
-  ogreticiIpucu: {
-    color: renkler.metinSolgun,
-    fontSize: 10,
-    lineHeight: 14,
-    textAlign: 'center',
-    marginTop: 6,
-  },
-  ogreticiBaglanti: { color: renkler.vurgu, fontWeight: '800' },
+  hizliPillYazi: { color: '#0b2717', fontSize: 17, fontWeight: '900', letterSpacing: 1 },
+  hizliPillAlt: { color: '#0b2717', fontSize: 10, fontWeight: '600', opacity: 0.8, marginTop: 1 },
 });

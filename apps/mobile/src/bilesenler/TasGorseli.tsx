@@ -29,6 +29,13 @@ interface Ozellikler {
    * En onemli bilgi oldugu icin diger iki isaretin onune geciyor.
    */
   readonly bitirir?: boolean;
+  /**
+   * Bu tas elin basinda degil SONRADAN geldi — cektim, caldim ya da ceza
+   * olarak aldim (src/sonradanGelenler.ts). Ustte kucuk gri bir ok cikar;
+   * alttaki isler/okeyeYarar/bitirir isaretleriyle KARISMAZ, o ayri bir soru
+   * ("bu tasi atarsam ne olur") bu ise "bu tas nereden geldi".
+   */
+  readonly sonradanGeldi?: boolean;
 }
 
 /**
@@ -45,6 +52,7 @@ export const TasGorseli = memo(function TasGorseli({
   isler = false,
   okeyeYarar = false,
   bitirir = false,
+  sonradanGeldi = false,
 }: Ozellikler) {
   const olcu = cozumle(boy);
   // Ic detaylar da olcuyle birlikte kuculur; sabit birakilirsa kucuk
@@ -94,6 +102,19 @@ export const TasGorseli = memo(function TasGorseli({
           ]}
         />
       )}
+      {sonradanGeldi ? (
+        <View
+          style={[
+            stil.sonradanOku,
+            {
+              top: dip,
+              borderLeftWidth: olcu.nokta,
+              borderRightWidth: olcu.nokta,
+              borderTopWidth: olcu.nokta,
+            },
+          ]}
+        />
+      ) : null}
     </View>
   );
 });
@@ -131,4 +152,15 @@ const stil = StyleSheet.create({
   islerIsareti: { backgroundColor: renkler.uyari },
   okeyIsareti: { backgroundColor: okeyRengi },
   bitirirIsareti: { backgroundColor: renkler.onay },
+  // Asagi bakan ucgen: sol/sag kenarlik SEFFAF, ust kenarlik RENKLI — klasik
+  // CSS ucgen numarasi. Genislik/yukseklik 0, ucgenin kendisi kenarlikten.
+  sonradanOku: {
+    position: 'absolute',
+    width: 0,
+    height: 0,
+    backgroundColor: 'transparent',
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: renkler.metinSolgun,
+  },
 });
