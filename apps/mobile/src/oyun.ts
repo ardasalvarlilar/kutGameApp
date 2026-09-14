@@ -33,7 +33,7 @@ import {
   type Tas,
   type TurNo,
 } from '@kut/engine';
-import { botAksiyonu, botTalebi } from '@kut/politika';
+import { botAksiyonu, botTalebi, gosterimSuresi, yeniHareketler } from '@kut/politika';
 import { useCeviri, type MetinAnahtari } from './dil';
 import type { MasaSurucusu } from './surucu';
 import {
@@ -202,6 +202,45 @@ export function useOyun(
   const durumRef = useRef(durum);
   durumRef.current = durum;
 
+  // --- Sira gecisi (KURALLAR.md §9 0.13) ------------------------------------
+  // Sira, az once oynananlar ekranda gosterildikten sonra geciyor. Hesap
+  // @kut/politika'da — sunucuyla AYNI. Bu effect asagidaki bot ve sayac
+  // effect'lerinden ONCE tanimli olmak zorunda: onlar ayni commit'te
+  // `siraAcilisiRef`i okuyor.
+  const gosterilenRef = useRef(0);
+  const sonSiradakiRef = useRef<OyuncuId | null>(null);
+  const siraAcilisiRef = useRef(0);
+  const [siraAcilisi, setSiraAcilisi] = useState(0);
+
+  useEffect(() => {
+    // Yeni el: hareket numaralari bastan basliyor.
+    if (durum.sonHareketNo < gosterilenRef.current) gosterilenRef.current = 0;
+    const yeniler = yeniHareketler(durum.sonHareketler, gosterilenRef.current);
+    gosterilenRef.current = durum.sonHareketNo;
+
+    if (durum.siradaki === sonSiradakiRef.current) return;
+    sonSiradakiRef.current = durum.siradaki;
+    const acilis = Date.now() + gosterimSuresi(yeniler);
+    siraAcilisiRef.current = acilis;
+    setSiraAcilisi(acilis);
+  }, [durum]);
+
+  /** Sira bende ama onceki hamle hala ekranda oynuyor. */
+  const [siraBekleniyor, setSiraBekleniyor] = useState(false);
+  useEffect(() => {
+    const kalan = siraAcilisi - Date.now();
+    if (kalan <= 0) {
+      setSiraBekleniyor(false);
+      return;
+    }
+    setSiraBekleniyor(true);
+    const sayac = setTimeout(() => setSiraBekleniyor(false), kalan);
+    return () => clearTimeout(sayac);
+  }, [siraAcilisi]);
+
+  /** Onceki hamlenin gosteriminden kalan sure (ms). */
+  const gosterimKalani = (): number => Math.max(0, siraAcilisiRef.current - Date.now());
+
   const gonder = useCallback((aksiyon: Aksiyon): boolean => {
     const sonuc = reduce(durumRef.current, aksiyon);
     if (!sonuc.ok) {
@@ -247,7 +286,7 @@ export function useOyun(
     if (yerTutucularDursun) return;
 
     const siradaki = durum.siradaki;
-    const bekleme = botBeklemesi(durum);
+    const bekleme = gosterimKalani() + botBeklemesi(durum);
 
     const zamanlayici = setTimeout(() => {
       // Bir sirada birden cok hamle olabilir: acilis, isleme, sonra atis.
@@ -306,7 +345,7 @@ export function useOyun(
         // koltuk icin null donuyor.
         if (aksiyon !== null) gonder(aksiyon);
       }
-    }, insanCalabilirMi(durum) ? BOT_TALEP_GECIKMESI_MS : BOT_HIZLI_TALEP_MS);
+    }, gosterimKalani() + (insanCalabilirMi(durum) ? BOT_TALEP_GECIKMESI_MS : BOT_HIZLI_TALEP_MS));
 
     return () => clearTimeout(zamanlayici);
   }, [durum, gonder, yerTutucularDursun]);
@@ -333,7 +372,8 @@ export function useOyun(
       setSiraBitisi(null);
       return;
     }
-    setSiraBitisi(Date.now() + siraSuresi);
+    // Sayac, onceki hamlenin gosterimi bitince basliyor (§9 0.13).
+    setSiraBitisi(Math.max(Date.now(), siraAcilisiRef.current) + siraSuresi);
   }, [elNo, durum.siradaki, durum.faz, elBitti, siraSuresi, sureDur]);
 
   useEffect(() => {
@@ -406,8 +446,10 @@ export function useOyun(
     suAnkiDurum,
     yeniEl,
     sonrakiTur,
-    siraBitisi,
+    // Onceki hamle oynarken sayac gosterilmiyor; cubuk %100'u asardi.
+    siraBitisi: siraBekleniyor ? null : siraBitisi,
     siraSuresi,
+    siraBekleniyor: durum.siradaki === INSAN && siraBekleniyor,
     sureKademem: sureKademeleri[INSAN],
     macPuanlari,
     oynananEl,

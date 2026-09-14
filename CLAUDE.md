@@ -462,6 +462,15 @@ Arayüz **landscape**'e kilitli (Okey 101 Plus düzeni):
   bekletiyordu — hızlı oynayan herkesi geciktiriyor, düşünene ise yetmiyordu.
   Sonucu kodda görünür: motor talep penceresi için **hiç saat okumuyor**,
   `yetkiler.ts` de artık `suAn` almıyor
+- **Sıra, önceki hamle ekranda gösterildikten sonra geçer** (KURALLAR.md
+  §9 0.13). Bot bir sırada çekip iki kütü taş taş indirip atıyordu; ekran
+  bunları tek tek uçururken sıradaki oyuncu atılan taşı çoktan çekmiş
+  oluyordu. Artık yeni sıra, az önce oynananların uçuş süresi (taş başına
+  340 ms) + 1 sn görme payı sonra başlıyor. Hesap `@kut/politika`
+  `tempo.ts`'te ve `UcanTas` da süresini oradan alıyor — tahmin ile animasyon
+  aynı sayıya bakıyor. Sunucu bu sürede sıradakinin hamlesini reddediyor,
+  ekran çekmeyi kapatıp "Sıra sana geliyor…" yazıyor; sayaç bu süre bitince
+  başlıyor
 - Sırası gelen oyuncunun **30 saniyesi** vardır (KURALLAR.md §9 0.4,
   `ayarlar.siraSureleriMs`). Süre iki kez başlar: sıra geçtiğinde ve her
   **taş çekmeden** sonra. Geri sayım `TUR` satırının sağında, altında ince

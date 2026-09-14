@@ -103,6 +103,25 @@ export function useCevrimiciMasa(soket: Socket | null, bagli: boolean): Cevrimic
   /** Gonderilen her hamleye artan numara — sunucu tekrari boyle eliyor. */
   const hamleNoRef = useRef(0);
 
+  // §9 0.13 — sira, onceki hamle ekranda gosterildikten sonra geciyor. Anini
+  // sunucu soyluyor (`baslangicZamani`); ekran o ana kadar cekmeyi kapatiyor
+  // ve sayaci gostermiyor. Sunucu erken hamleyi zaten reddediyor.
+  const [siraBekleniyor, setSiraBekleniyor] = useState(false);
+  useEffect(() => {
+    if (sure === null) {
+      setSiraBekleniyor(false);
+      return;
+    }
+    const kalan = sure.baslangicZamani - zamanOfsetiRef.current - Date.now();
+    if (!(kalan > 0)) {
+      setSiraBekleniyor(false);
+      return;
+    }
+    setSiraBekleniyor(true);
+    const sayac = setTimeout(() => setSiraBekleniyor(false), kalan);
+    return () => clearTimeout(sayac);
+  }, [sure]);
+
   // --- Sunucudan gelenler ----------------------------------------------------
 
   useEffect(() => {
@@ -303,8 +322,11 @@ export function useCevrimiciMasa(soket: Socket | null, bagli: boolean): Cevrimic
     // Sure yalnizca SIRASI GELENIN sayaci; baskasinin sirasindayken
     // gosterilmiyor (yerel surucu de boyle davraniyor).
     const benimSiram = sure !== null && sure.siradaki === gorunum.ben;
+    // Onceki hamle oynarken sayac gosterilmiyor: sure o an baslamadi.
     const siraBitisi =
-      benimSiram && gorunum.faz !== 'el-bitti' ? sure.bitisZamani - zamanOfsetiRef.current : null;
+      benimSiram && !siraBekleniyor && gorunum.faz !== 'el-bitti'
+        ? sure.bitisZamani - zamanOfsetiRef.current
+        : null;
 
     return {
       gorunum,
@@ -312,6 +334,7 @@ export function useCevrimiciMasa(soket: Socket | null, bagli: boolean): Cevrimic
       gonder,
       siraBitisi,
       siraSuresi: sure?.sure ?? VARSAYILAN_AYARLAR.siraSureleriMs[0] ?? 30_000,
+      siraBekleniyor: benimSiram && siraBekleniyor,
       macPuanlari,
       macKazananlari: elSonu?.macKazananlari ?? [],
       turArasiSn: elSonu?.sonrakiElSn ?? null,
@@ -322,7 +345,7 @@ export function useCevrimiciMasa(soket: Socket | null, bagli: boolean): Cevrimic
       bagli,
       cevrimici: true,
     };
-  }, [gorunum, oyunHatasi, gonder, sure, macPuanlari, elSonu, adlar, bagli]);
+  }, [gorunum, oyunHatasi, gonder, sure, siraBekleniyor, macPuanlari, elSonu, adlar, bagli]);
 
   const hatayiSil = useCallback(() => setHata(null), []);
 

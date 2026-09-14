@@ -68,6 +68,7 @@ export const SUNUCU_HATA_KODLARI = [
   'oyuncu-bulunamadi',
   'parola-ayni',
   'sifirlama-kullanilamiyor',
+  'sira-henuz-gelmedi',
   'sunucu-hatasi',
   'talep-gecersiz',
   'talep-yok',

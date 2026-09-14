@@ -13,6 +13,19 @@
       "port": 4000
     },
     {
+      "name": "kut-sunucu-yerel",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "MONGO_URI=mongodb://127.0.0.1:27017/kut-onizleme",
+        "corepack",
+        "pnpm",
+        "--filter",
+        "@kut/server",
+        "dev"
+      ],
+      "port": 4000
+    },
+    {
       "name": "kut-web",
       "runtimeExecutable": "corepack",
       "runtimeArgs": [

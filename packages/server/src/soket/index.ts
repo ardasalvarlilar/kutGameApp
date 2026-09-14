@@ -308,6 +308,8 @@ export function soketiKur(io: Server): void {
           bitisZamani: bitis,
           sure: oturum.oyun.siraSuresi(),
           sunucuZamani: Date.now(),
+          // Geri gelen oyuncu da onceki hamle bitmeden cekmeye kalkmasin (§9 0.13).
+          baslangicZamani: oturum.siraAcilisi,
         });
       }
     };

@@ -196,6 +196,7 @@ export function Masa({
     sonrakiTur,
     siraBitisi,
     siraSuresi,
+    siraBekleniyor,
     macPuanlari,
     macKazananlari,
     turArasiSn,
@@ -977,7 +978,10 @@ export function Masa({
     return islemePlani(gonderilecek, istakam, gorunum.yer).length > 0;
   }, [secili, gorunum.islerTaslarim, gorunum.yer, istakam, gruplar]);
 
-  const atikAlinabilir = izin.yerdenAlabilir && gorunum.atikUstu !== null;
+  // §9 0.13 — onceki hamle hala oynarken sira bende olsa da cekemem: atilan
+  // tas herkese gorunmeden alinmasin.
+  const cekmeIzni = izin.cekebilir && !siraBekleniyor;
+  const atikAlinabilir = izin.yerdenAlabilir && !siraBekleniyor && gorunum.atikUstu !== null;
 
   // §9 0.4 — suresini dolduran oyuncunun hakki 30 → 20 → 10 diye iner.
   // Kademeyi surucu bildirmiyor (sunucu tarafinda tutuluyor); tam sureden
@@ -989,7 +993,9 @@ export function Masa({
   const fazMetni = elBitti
     ? t('masa.elBitti')
     : gorunum.siradaki === INSAN
-      ? t(gorunum.faz === 'cekme' ? 'masa.siraSendeCek' : 'masa.siraSendeOyna')
+      ? siraBekleniyor
+        ? t('masa.siraGeliyor')
+        : t(gorunum.faz === 'cekme' ? 'masa.siraSendeCek' : 'masa.siraSendeOyna')
       : t('masa.oynuyor', { ad: ADLAR[gorunum.siradaki] });
 
   // --- Ortadan tas cekme ------------------------------------------------------
@@ -1041,7 +1047,7 @@ export function Masa({
               slotBoy: slotBoyu(tasBoyu),
             });
       // Surukleme surerken sira degismis olabilir (sure doldu, sunucu cekti).
-      const izinli = kaynak === 'atik' ? atikAlinabilir : izin.cekebilir;
+      const izinli = kaynak === 'atik' ? atikAlinabilir : cekmeIzni;
       if (alan === null || slot === null || !izinli) {
         cekmeyiGeriGotur();
         return;
@@ -1100,7 +1106,7 @@ export function Masa({
       sutunSayisi,
       tasBoyu,
       atikAlinabilir,
-      izin.cekebilir,
+      cekmeIzni,
       gorunum.atikUstu,
       istakam,
       gonder,
@@ -1142,7 +1148,7 @@ export function Masa({
                 <Orta
                   gorunum={gorunum}
                   alinabilir={atikAlinabilir}
-                  cekilebilir={izin.cekebilir}
+                  cekilebilir={cekmeIzni}
                   obekRef={obekRef}
                   ustTasGizli={ustTasGizli}
                   altindaki={obekAltindaki}

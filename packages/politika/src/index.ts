@@ -28,3 +28,4 @@
 export * from './bot';
 export * from './dizme';
 export * from './sure';
+export * from './tempo';

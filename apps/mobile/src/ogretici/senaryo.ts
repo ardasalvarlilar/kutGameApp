@@ -23,9 +23,11 @@
 //   İSTİYORUM     2 numarali `siyah9` atiyor. Atanin sagindaki 1 numarali
 //                 (§5 onceligi) desteden cekiyor, tas kullaniciya kaliyor.
 //
-// Yer tutucularin elleri de bu anlara gore kuruluyor; hamlelerini bot
-// politikasi degil, senaryonun kendi listesi surukluyor (`hamleler.ts`) —
-// `bot.ts`te bir ayar degisince ogretici bozulmasin diye.
+// Yer tutucularin hamlelerini GERCEK bot politikasi (`@kut/politika`)
+// oynatiyor; ayri bir senaryo listesi yok. Bu yuzden eller ve destenin ilk
+// tasi, botun kararlarini bu anlara goturecek sekilde kuruluyor ve
+// `senaryo.test.ts` botu gercekten oynatarak dogruluyor — `bot.ts`te bir ayar
+// degisip ogreticiyi bozarsa orada patliyor.
 
 import {
   desteOlustur,
@@ -84,7 +86,24 @@ export const YER_TUTUCU_ACILISI = {
  * Elle secildi: birbirleriyle per KURMAMALILAR, yoksa "hangi taslari
  * secmeliyim" adimi bulaniklasir ve `TAŞLARI İŞLE` beklenmedik tas gonderir.
  */
-const OGRENCI_DOLGUSU = [t('mavi', 1), t('siyah', 13), t('sari', 2), t('kirmizi', 12)];
+export const OGRENCI_DOLGUSU = [t('mavi', 1), t('siyah', 13), t('sari', 2), t('kirmizi', 12)];
+
+/**
+ * Destenin ILK tasi — kullanicinin ilk atisindan sonra 3 numarali bunu cekiyor.
+ *
+ * Dagitimin kendiliginden verdigi ilk tas `mavi6` idi ve ogreticiyi
+ * BOZUYORDU: 3 numaralinin dolgusunda `sari6 + kirmizi6` var, ucuncu 6
+ * gelince okeysiz bir 6-6-6 kuruluyor ve bot okeyi saklamak icin onu
+ * aciyordu (`acilisBul`: okey kit kaynak, okeysiz cozum once). Yerde okeyli
+ * kut olmayinca "OKEY AL" adimi yapilamiyordu. Kullanici botun isine yarayan
+ * bir tas attiginda (mavi1, sari2) bot desteden cekmeyip onu aldigi icin
+ * dogru aciyordu — hata, hangi tasin atildigina bagliydi.
+ *
+ * `sari1` 3 numaraliya okeysiz hicbir acilis kazandirmiyor (elinde tek 1 var).
+ * Destenin SONUNDAKI tasla yer degistiriyor: yalnizca iki konum oynuyor,
+ * sonraki cekisler ve ogreticinin geri kalan akisi aynen kaliyor.
+ */
+export const ILK_CEKILEN_TAS = t('sari', 1);
 
 const OGRENCI_ELI: readonly Tas[] = [
   ...ACILIS_KUTLERI.yediler,
@@ -165,5 +184,10 @@ export function ogreticiDestesi(): readonly Tas[] {
     doldur(BIR_NUMARALI_ELI, NORMAL_ADET),
   ];
 
-  return [...eller.flat(), ...kalanlar.slice(sonraki)];
+  const deste = [...kalanlar.slice(sonraki)];
+  const indeks = deste.findIndex((tas) => tas.id === ILK_CEKILEN_TAS.id);
+  if (indeks > 0) {
+    [deste[0], deste[indeks]] = [deste[indeks] as Tas, deste[0] as Tas];
+  }
+  return [...eller.flat(), ...deste];
 }

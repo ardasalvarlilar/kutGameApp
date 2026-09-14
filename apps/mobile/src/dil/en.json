@@ -399,5 +399,7 @@
   "uygulama.yukleniyor": "Getting ready…",
   "ogretici.calmaSonucBaslik": "Resolving your claim",
   "ogretici.calmaSonucMetin": "The claim resolves once the player in turn moves. If the tile comes to you, a penalty tile comes with it.",
-  "ogretici.calmaSonucEk": "The tile goes to the highest-priority claimant, starting from the discarder's right — if someone ahead of you claimed it, it's theirs."
+  "ogretici.calmaSonucEk": "The tile goes to the highest-priority claimant, starting from the discarder's right — if someone ahead of you claimed it, it's theirs.",
+  "masa.siraGeliyor": "Your turn is coming…",
+  "sunucu.sira-henuz-gelmedi": "The previous move is still playing — one moment"
 }

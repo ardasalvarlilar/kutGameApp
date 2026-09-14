@@ -399,5 +399,7 @@
   "uygulama.yukleniyor": "Hazırlanıyor…",
   "ogretici.calmaSonucBaslik": "Talep sonuçlanıyor",
   "ogretici.calmaSonucMetin": "Sıradaki oyuncu hamlesini yapınca talep sonuçlanır. Taş sana gelirse yanında bir de ceza taşı gelir.",
-  "ogretici.calmaSonucEk": "Taş, atanın sağındakinden başlayarak en öncelikli talep edene gider — senden önce daha öncelikli biri istediyse taş onun olur."
+  "ogretici.calmaSonucEk": "Taş, atanın sağındakinden başlayarak en öncelikli talep edene gider — senden önce daha öncelikli biri istediyse taş onun olur.",
+  "masa.siraGeliyor": "Sıra sana geliyor…",
+  "sunucu.sira-henuz-gelmedi": "Önceki hamle henüz bitmedi — bir saniye"
 }

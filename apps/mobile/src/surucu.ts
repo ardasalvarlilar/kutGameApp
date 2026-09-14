@@ -28,6 +28,13 @@ export interface MasaSurucusu {
   readonly siraBitisi: number | null;
   /** Bu siranin toplam hakki (ms) — geri sayim cubugunun orani icin. */
   readonly siraSuresi: number;
+  /**
+   * Sira bende ama onceki hamle hala ekranda oynuyor (KURALLAR.md §9 0.13).
+   *
+   * true iken cekemem ve sayac baslamamistir. Sira ancak atilan tas herkese
+   * gorundukten sonra geciyor; yoksa atilan tasi kimse gormeden cekilirdi.
+   */
+  readonly siraBekleniyor: boolean;
   /** Mac boyu birikmis puanlar (KURALLAR.md §8). */
   readonly macPuanlari: OyuncuKaydi<number>;
   /** Mac bittiyse en dusuk puanli oyuncular; bitmediyse bos. */

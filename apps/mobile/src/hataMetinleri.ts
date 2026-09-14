@@ -111,6 +111,7 @@ const SUNUCU_ANAHTARLARI: Record<string, MetinAnahtari> = {
   'oyuncu-bulunamadi': 'sunucu.oyuncu-bulunamadi',
   'parola-ayni': 'sunucu.parola-ayni',
   'sifirlama-kullanilamiyor': 'sunucu.sifirlama-kullanilamiyor',
+  'sira-henuz-gelmedi': 'sunucu.sira-henuz-gelmedi',
   'sunucu-hatasi': 'sunucu.sunucu-hatasi',
   'talep-gecersiz': 'sunucu.talep-gecersiz',
   'talep-yok': 'sunucu.talep-yok',

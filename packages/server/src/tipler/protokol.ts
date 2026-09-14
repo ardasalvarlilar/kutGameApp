@@ -73,6 +73,11 @@ export interface SureGorunumu {
    * ofsetini duzeltiyor — telefonun saati yanlissa geri sayim bozulmasin.
    */
   readonly sunucuZamani: number;
+  /**
+   * Sirasi gelenin hamle yapabilecegi ilk an (sunucu saatiyle). Oncesinde
+   * onceki hamle ekranda oynuyor (KURALLAR.md §9 0.13); sayac da bu andan.
+   */
+  readonly baslangicZamani: number;
 }
 
 // --- Istemci → sunucu --------------------------------------------------------

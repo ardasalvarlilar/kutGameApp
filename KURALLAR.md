@@ -1,6 +1,6 @@
 # Küt — Kural Spesifikasyonu
 
-> Sürüm 0.12. Kural motoru **yalnızca** bu dokümandan yazılır.
+> Sürüm 0.13. Kural motoru **yalnızca** bu dokümandan yazılır.
 > Burada yazmayan kural oyunda yoktur. Belirsiz bir nokta varsa
 > tahmin etme — "Karara bağlananlar" bölümüne bak, orada da yoksa sor.
 >
@@ -11,8 +11,9 @@
 > sayıldı, 0.7'de süre kademesi el sonunda sıfırlandı, 0.8'de yerdeki okeyin
 > yeri sabitlendi, 0.9'da talep penceresinin süresi kaldırıldı, 0.10'da
 > "çifti bende" anında sonuçlanan bir hamleye çevrildi, 0.11'de okeyle
-> bitirenin puanı -200 oldu, **0.12'de deste tükenince el son taşı çekenin
-> atışıyla kapanır oldu** (bkz. §9).
+> bitirenin puanı -200 oldu, 0.12'de deste tükenince el son taşı çekenin
+> atışıyla kapanır oldu, **0.13'te sıra, atılan taş herkese gösterildikten
+> sonra geçer oldu** (bkz. §9).
 
 Küt, halk arasında **Americano** olarak da bilinen oyunun okey taşlarıyla
 oynanan hâlidir. 101'e benzer ama her turun kendi açılış şartı vardır.
@@ -175,9 +176,10 @@ Pencerenin **süresi yoktur** (0.9 ile karara bağlandı). Sırası gelen oyuncu
 hamlesini yapana kadar açık kalır; onun hamlesi pencereyi kapatır.
 
 1. Taş atılır, pencere açılır. 3 ve 4 numaralıda "İstiyorum" butonu belirir.
-2. 2 numaralı **beklemez**: dilerse aynı anda çeker. Kendi sıra süresi
-   (§9 0.4, 30 sn) boyunca düşünebilir; diğerlerinin tepki süresi de tam
-   olarak bu süredir.
+2. 2 numaralı, atılan taş masada gösterildikten sonra (0.13) **beklemeden**
+   çekebilir. Kendi sıra süresi (§9 0.4, 30 sn) boyunca düşünebilir;
+   diğerlerinin tepki süresi de tam olarak bu süredir — ve en az 0.13'ün
+   görme payı kadardır.
 3. 2 numaralı taşı alırsa iş biter, talepler düşer.
 4. 2 numaralı desteden çekerse pencere kapanır ve o an talepte bulunanların
    **en öncelikli olanı** taşı alır: taş + desteden 1 ceza taşı + 5 puan.
@@ -641,6 +643,32 @@ kapanıyor") değiştirdi.
 
 Motorda karşılığı: `at` içinde, eli bitirme kontrolünden hemen sonra deste
 boşsa `elBitir(…, 'deste-tukendi', …)`.
+
+### 0.13 ile eklenenler (15 Eylül 2026)
+
+| Konu | Karar | Nerede |
+|---|---|---|
+| Sıra ne zaman geçer? | **Önceki hamle masada gösterildikten sonra** | §5, §9 0.4 |
+
+Oyunda fark edildi: bir oyuncu (özellikle bot) aynı sırada çekip, iki kütü
+taş taş indirip bir taş attığında ekran bunları sırayla gösteriyor. Sıra ise
+hemen geçiyordu ve sıradaki oyuncu, atılan taş ekranda daha belirmeden onu
+çekiyordu. Diğerleri atılan taşı hiç göremiyor, "istiyorum" diyemiyordu; hızlı
+oynayan bir oyuncuda da yığının üstünde bir anda başka bir taş duruyordu.
+
+Artık sıra, önceki oyuncunun hamleleri masada gösterildikten **sonra** geçer:
+her taşın uçuşu (340 ms, sırayla) ve taş atıldıysa yere konduktan sonra
+1 saniyelik görme payı. Bu süre içinde sıradaki oyuncu çekemez. Sıra süresi
+(§9 0.4) de bu süre bitince başlar — bekleme oyuncunun hakkından yemez.
+
+Talep penceresinin süresiz olması (0.9) değişmedi: pencere hâlâ sıradaki
+oyuncunun hamlesiyle kapanır. Değişen, o hamlenin **en erken** ne zaman
+yapılabileceği. Diğerlerinin "istiyorum" hakkı bu süre boyunca da açık.
+
+Motorda karşılığı yok (motor zaman bilmiyor, CLAUDE.md kural #1). Süre hesabı
+`@kut/politika` `tempo.ts`'te; uygulaması sunucuda (`soket/masaOturumu.ts`,
+erken hamleyi `sira-henuz-gelmedi` ile reddediyor) ve çevrimdışı sürücüde
+(`apps/mobile/src/oyun.ts`).
 
 ---
 

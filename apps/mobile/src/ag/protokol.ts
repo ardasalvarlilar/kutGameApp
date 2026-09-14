@@ -63,6 +63,8 @@ export interface SureGorunumu {
   readonly bitisZamani: number;
   readonly sure: number;
   readonly sunucuZamani: number;
+  /** Sirasi gelenin hamle yapabilecegi ilk an; oncesinde onceki hamle oynuyor (§9 0.13). */
+  readonly baslangicZamani: number;
 }
 
 export interface ElSonuVerisi {

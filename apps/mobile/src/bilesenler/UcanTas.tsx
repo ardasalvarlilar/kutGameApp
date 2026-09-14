@@ -1,11 +1,14 @@
 import { useEffect, useRef } from 'react';
 import { Animated, Easing, StyleSheet } from 'react-native';
 import type { Tas } from '@kut/engine';
+import { UCUS_SURESI_MS } from '@kut/politika';
 import { OLCULER } from '../olculer';
 import { TasGorseli } from './TasGorseli';
 
 const TAS = OLCULER.orta;
-const SURE_MS = 340;
+// Sure @kut/politika'dan: sira ancak ucuslar bitince geciyor (§9 0.13) ve o
+// hesap AYNI sayiya bakiyor. Burada ayri bir sabit, ikisinin ayrismasi olurdu.
+const SURE_MS = UCUS_SURESI_MS;
 
 export interface Nokta {
   readonly x: number;

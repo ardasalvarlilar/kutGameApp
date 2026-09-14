@@ -12,7 +12,13 @@ import type { Aksiyon, OyuncuId, TurNo } from '@kut/engine';
 // Sure dolunca ne oynanacagi bir KURAL degil, politika: @kut/politika'da,
 // cevrimdisi masayla AYNI dosyada. Eskiden burada bir kopyasi vardi
 // (`soket/yerineOyna.ts`) ve iki botun ayni oynayacaginin garantisi yoktu.
-import { botAksiyonu, botTalebi, sureDolduAksiyonu } from '@kut/politika';
+import {
+  botAksiyonu,
+  botTalebi,
+  gosterimSuresi,
+  sureDolduAksiyonu,
+  yeniHareketler,
+} from '@kut/politika';
 import { OyunServisi } from '../servisler/oyunServisi.js';
 import type { MasaGorunumu, SunucuOlaylari } from '../tipler/protokol.js';
 import { kayit } from '../kayit.js';
@@ -102,6 +108,14 @@ export class MasaOturumu {
   /** Koltuk -> son islenen hamle numarasi. Tekrar gonderimi engeller. */
   #sonHamleNo = new Map<OyuncuId, number>();
 
+  // --- Sira gecisi (KURALLAR.md §9 0.13) -------------------------------------
+  /** Gosterim suresine sayilmis son hareket (`sira`). */
+  #gosterilenHareket = 0;
+  /** Son surenin kimin icin kuruldugu — "sira gecti mi" buna bakiyor. */
+  #sonSiradaki: OyuncuId | null = null;
+  /** Sirasi gelenin hamle yapabilecegi ilk an; oncesinde onceki hamle oynuyor. */
+  #siraAcilisi = 0;
+
   constructor(io: Server, secenekler: OturumSecenekleri) {
     this.#io = io;
     this.masaId = secenekler.masaId;
@@ -116,6 +130,11 @@ export class MasaOturumu {
 
   get odaAdi(): string {
     return `masa:${this.masaId}`;
+  }
+
+  /** Sirasi gelenin hamle yapabilecegi ilk an (§9 0.13) — yeniden baglanana da gidiyor. */
+  get siraAcilisi(): number {
+    return this.#siraAcilisi;
   }
 
   koltugu(oyuncuId: string): OyuncuId | null {
@@ -230,6 +249,16 @@ export class MasaOturumu {
     // guvenilmez olurdu; aksiyonun icindeki `oyuncu` alani istemciden geliyor.
     if (aksiyon.oyuncu !== koltuk) return { ok: false, hata: 'baskasinin-adina' };
 
+    // §9 0.13 — sira, onceki hamle masada gosterildikten sonra gecer. Istemci
+    // bu surede cekmeyi zaten kapatiyor; karar yine de sunucunun. Calma
+    // talepleri (sirasi olmayanlar) serbest: pencere acik.
+    if (koltuk === this.#oyun.siradaki && Date.now() < this.#siraAcilisi) {
+      this.#io
+        .to(this.#kisiselOda(oyuncuId))
+        .emit('oyun:hata', { reason: 'sira-henuz-gelmedi', hamleNo });
+      return { ok: false, hata: 'sira-henuz-gelmedi' };
+    }
+
     const oncekiHamle = this.#sonHamleNo.get(koltuk);
     if (oncekiHamle !== undefined && hamleNo <= oncekiHamle) {
       // Yeniden baglanmada tekrar gonderim olur; sessizce yut.
@@ -269,17 +298,33 @@ export class MasaOturumu {
     this.#zamanlayiciyiDurdur();
     if (this.#oyun.bittiMi) return;
 
-    const bitis = this.#oyun.sureyiBaslat(Date.now());
+    const suAn = Date.now();
+    const durum = this.#oyun.durum;
+    const yeniler = yeniHareketler(durum.sonHareketler, this.#gosterilenHareket);
+    this.#gosterilenHareket = durum.sonHareketNo;
+
+    // §9 0.13 — SIRA GECTIYSE yeni sira, az once oynananlar ekranda
+    // gosterildikten sonra basliyor. Bot bir sirada cekip, iki kut indirip,
+    // tas atiyor; ekran bunlari tek tek ucuruyor. Beklemeseydik sirasi gelen,
+    // atilan tas daha ekranda belirmeden onu cekiyordu. Ayni oyuncunun
+    // cekmesinden sonra (sure yeniden basliyor, §9 0.4) beklenecek bir sey yok.
+    const siraGecti = this.#oyun.siradaki !== this.#sonSiradaki;
+    this.#sonSiradaki = this.#oyun.siradaki;
+    this.#siraAcilisi = suAn + (siraGecti ? gosterimSuresi(yeniler) : 0);
+
+    // Sayac da gosterim bitince basliyor: bekleme oyuncunun suresinden yemesin.
+    const bitis = this.#oyun.sureyiBaslat(this.#siraAcilisi);
     this.#yayinla('oyun:sure', {
       siradaki: this.#oyun.siradaki,
       bitisZamani: bitis,
       sure: this.#oyun.siraSuresi(),
       // Istemci kendi saatiyle farki alip ofsetini duzeltsin diye: telefonun
       // saati yanlissa geri sayim bozulmasin.
-      sunucuZamani: Date.now(),
+      sunucuZamani: suAn,
+      baslangicZamani: this.#siraAcilisi,
     });
 
-    this.#zamanlayici = setTimeout(() => this.#sureDoldu(), Math.max(0, bitis - Date.now()));
+    this.#zamanlayici = setTimeout(() => this.#sureDoldu(), Math.max(0, bitis - suAn));
     this.#botuPlanla();
     // Pencere tam da burada aciliyor (atistan sonra faz degisiyor); botlarin
     // calma karari da bu ana bagli.
@@ -320,7 +365,16 @@ export class MasaOturumu {
     this.#talepZamanlayici = setTimeout(() => {
       this.#talepZamanlayici = null;
       this.#botTalepleri();
-    }, this.#talepGecikmesi());
+    }, this.#gosterimKalani() + this.#talepGecikmesi());
+  }
+
+  /**
+   * Onceki hamlenin gosteriminden kalan sure (ms). Bot da insan gibi atilan
+   * tasi ancak ekranda gorunce degerlendirebilmeli — yoksa insanin goremedigi
+   * bir tasa bot "istiyorum" derdi (§9 0.13).
+   */
+  #gosterimKalani(): number {
+    return Math.max(0, this.#siraAcilisi - Date.now());
   }
 
   /**
@@ -383,7 +437,7 @@ export class MasaOturumu {
     this.#botZamanlayici = setTimeout(() => {
       this.#botZamanlayici = null;
       this.#botOyna(koltuk);
-    }, this.#botBeklemesi());
+    }, this.#gosterimKalani() + this.#botBeklemesi());
   }
 
   /**
@@ -473,6 +527,9 @@ export class MasaOturumu {
   yeniEl(tur: TurNo): void {
     this.#sonHamleNo.clear();
     this.#oyun.yeniEl(tur);
+    // Yeni elde hareket numaralari bastan basliyor; dagitimin ucusu yok.
+    this.#gosterilenHareket = this.#oyun.durum.sonHareketNo;
+    this.#sonSiradaki = null;
     this.baslat();
   }
 

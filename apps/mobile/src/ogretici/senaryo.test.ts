@@ -15,14 +15,18 @@ import {
   sartKarsilaniyorMu,
   siradaIleri,
   viewFor,
+  type Aksiyon,
+  type OyunDurumu,
   type Tas,
 } from '@kut/engine';
 import { botAksiyonu } from '@kut/politika';
 import {
   ACILIS_KUTLERI,
   CALINACAK_TAS,
+  ILK_CEKILEN_TAS,
   ISLENECEK_TAS,
   OGRENCI,
+  OGRENCI_DOLGUSU,
   OKEY_TAMAMLAYICILARI,
   YER_TUTUCU_ACILISI,
   ogreticiDestesi,
@@ -181,6 +185,49 @@ describe('el ogretici bitmeden kapanmiyor', () => {
       }
     }
   });
+});
+
+// Canli oynanista cikan hata: kullanici `siyah13` ya da `kirmizi12` atinca
+// 3 numarali desteden `mavi6` cekiyor, dolgusundaki `sari6 + kirmizi6` ile
+// okeysiz 6-6-6 kuruyor ve okeyi saklamak icin onu aciyordu. Yerde okeyli
+// kut olmayinca "OKEY AL" adimi yapilamiyordu. Karari BOTUN KENDISI veriyor,
+// bu yuzden test de botu gercekten oynatiyor.
+describe('3 numarali okeyli kutle aciyor — kullanici hangi dolgu tasini atarsa atsin', () => {
+  function uygula(durum: OyunDurumu, aksiyon: Aksiyon): OyunDurumu {
+    const sonuc = reduce(durum, aksiyon);
+    if (!sonuc.ok) throw new Error(`${aksiyon.tip} reddedildi: ${sonuc.reason}`);
+    return sonuc.state;
+  }
+
+  it('destenin ilk tasi sabitlenmis tas', () => {
+    expect(elleriKur().deste[0]?.id).toBe(ILK_CEKILEN_TAS.id);
+  });
+
+  for (const atilan of OGRENCI_DOLGUSU) {
+    it(`${atilan.id} atilinca yerde kirmizi5 + mavi5 + okey var`, () => {
+      let durum = uygula(elleriKur(), {
+        tip: 'AC',
+        oyuncu: OGRENCI,
+        suAn: 0,
+        perler: [idler(ACILIS_KUTLERI.yediler), idler(ACILIS_KUTLERI.dortler)],
+        okeyAlimi: null,
+      });
+      durum = uygula(durum, { tip: 'AT', oyuncu: OGRENCI, suAn: 0, tasId: atilan.id });
+
+      const ucNumarali = siradaIleri(OGRENCI, 1);
+      for (let adim = 0; adim < 10 && durum.siradaki === ucNumarali; adim++) {
+        const aksiyon = botAksiyonu(viewFor(durum, ucNumarali), ucNumarali, 0);
+        if (aksiyon === null) break;
+        durum = uygula(durum, aksiyon);
+      }
+
+      const okeyli = durum.yer.find((per) => per.taslar.some((tas) => tas.tip === 'okey'));
+      expect(okeyli, 'yerde okeyli per yok — OKEY AL adimi yapilamaz').toBeDefined();
+      expect(idler(okeyli?.taslar ?? []).slice().sort()).toEqual(
+        idler(YER_TUTUCU_ACILISI.besler).slice().sort(),
+      );
+    });
+  }
 });
 
 describe('okey cekme senaryosu', () => {
