@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { OYUNCULAR, type ElSonucu, type OyuncuId, type OyuncuKaydi } from '@kut/engine';
+import type { MacSonu } from '../ag/protokol';
+import { cipKisa } from '../cip';
 import { useCeviri } from '../dil';
 import { renkler } from '../tema';
 
@@ -22,6 +24,11 @@ interface Ozellikler {
   readonly tur: number;
   /** Mac bittiyse kazananlar; bitmediyse bos. */
   readonly macKazananlari: readonly OyuncuId[];
+  /**
+   * Mac sonunda dagitilan cip ve XP. Cevrimdisi masada null — o zaman
+   * tabloda bu iki sutun hic cikmiyor.
+   */
+  readonly macSonu: MacSonu | null;
   /** Sonraki ele gecmeden once beklenecek sure (sn). Mac bittiyse yok. */
   readonly geriSayimSn?: number;
   /**
@@ -41,11 +48,13 @@ export function PuanTablosu({
   macPuanlari,
   tur,
   macKazananlari,
+  macSonu,
   geriSayimSn,
   onSonrakiTur,
   onYeniMac,
 }: Ozellikler) {
   const macBitti = macKazananlari.length > 0;
+  const odulVar = macBitti && macSonu !== null;
   const [kalan, setKalan] = useState(geriSayimSn ?? 0);
 
   // Mac bitmediyse geri sayim isler. Sifirlaninca sonraki ele gecilir — ama
@@ -101,6 +110,8 @@ export function PuanTablosu({
             {!macBitti ? <Text style={stil.baslikHucre}>{t('puan.carpan')}</Text> : null}
             {!macBitti ? <Text style={stil.baslikHucre}>{t('puan.buEl')}</Text> : null}
             <Text style={[stil.baslikHucre, stil.toplamSutunu]}>{t('puan.toplam')}</Text>
+            {odulVar ? <Text style={stil.baslikHucre}>{t('puan.cip')}</Text> : null}
+            {odulVar ? <Text style={stil.baslikHucre}>{t('puan.xp')}</Text> : null}
           </View>
 
           {siralama.map((oyuncu, sira) => {
@@ -133,6 +144,16 @@ export function PuanTablosu({
                 >
                   {macPuanlari[oyuncu]}
                 </Text>
+                {odulVar ? (
+                  <Text style={[stil.hucre, (macSonu.cip[oyuncu] ?? 0) > 0 && stil.kazananMetin]}>
+                    {(macSonu.cip[oyuncu] ?? 0) > 0 ? `+${cipKisa(macSonu.cip[oyuncu] ?? 0)}` : '—'}
+                  </Text>
+                ) : null}
+                {odulVar ? (
+                  <Text style={stil.hucre}>
+                    {(macSonu.deneyim[oyuncu] ?? 0) > 0 ? `+${macSonu.deneyim[oyuncu] ?? 0}` : '—'}
+                  </Text>
+                ) : null}
               </View>
             );
           })}

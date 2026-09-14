@@ -6,6 +6,7 @@
 // bir zarf ekliyor.
 
 import type { Aksiyon, ElSonucu, HataKodu, OyuncuGorunumu, OyuncuId } from '@kut/engine';
+import type { KademeKimligi } from '@kut/ekonomi';
 
 /** Masadaki bir koltuk — herkese acik bilgi. */
 export interface KoltukGorunumu {
@@ -43,6 +44,28 @@ export interface MasaGorunumu {
   readonly koltukTalepleri: readonly KoltukTalebiGorunumu[];
   /** Mac boyu birikmis puanlar; anahtar koltuk numarasi. */
   readonly puanlar: Readonly<Record<number, number>>;
+  readonly kademe: KademeKimligi;
+  /** Oyuncu basina giris (cip). */
+  readonly giris: number;
+  /** El basladiysa tahsil edilen toplam; baslamadiysa 0. */
+  readonly pot: number;
+}
+
+/**
+ * Mac sonunda kim ne kazandi. Anahtar koltuk numarasi; kazanmayan 0.
+ *
+ * Bot koltugu hicbir zaman cip ya da deneyim almaz (bkz. @kut/ekonomi odul.ts).
+ */
+export interface MacSonu {
+  readonly cip: Readonly<Record<number, number>>;
+  readonly deneyim: Readonly<Record<number, number>>;
+}
+
+/** Bakiye ya da seviye degisince oyuncunun KENDISINE giden ozet. */
+export interface CuzdanGorunumu {
+  readonly cip: number;
+  readonly seviye: number;
+  readonly deneyim: number;
 }
 
 /**
@@ -59,6 +82,8 @@ export interface AcikMasaOzeti {
   readonly oyuncular: readonly string[];
   /** Bu masada zaten oturuyor muyum? Ekran "geri dön" diyebilsin. */
   readonly benimMi: boolean;
+  readonly kademe: KademeKimligi;
+  readonly giris: number;
 }
 
 /** Sunucunun sira sayacini istemciye bildirmesi. */
@@ -84,16 +109,16 @@ export interface IstemciOlaylari {
     yanit: (sonuc: Yanit<{ masa: MasaGorunumu | null }>) => void,
   ) => void;
   'masa:kur': (
-    girdi: { readonly ozel?: boolean },
+    girdi: { readonly ozel?: boolean; readonly kademe?: KademeKimligi },
     yanit: (sonuc: Yanit<{ masa: MasaGorunumu }>) => void,
   ) => void;
   'masa:katil': (
     girdi: { readonly kod: string },
     yanit: (sonuc: Yanit<{ masa: MasaGorunumu }>) => void,
   ) => void;
-  /** Hizli eslesme: acik bir masaya oturt, yoksa yeni acik masa ac. */
+  /** Hizli eslesme: o kademede acik bir masaya oturt, yoksa yeni acik masa ac. */
   'masa:hizli': (
-    girdi: Record<string, never>,
+    girdi: { readonly kademe?: KademeKimligi },
     yanit: (sonuc: Yanit<{ masa: MasaGorunumu }>) => void,
   ) => void;
   /** MASA BUL: oturulabilecek acik masalar. Ozel masalar donmez. */
@@ -160,8 +185,12 @@ export interface SunucuOlaylari {
     readonly macKazananlari: readonly OyuncuId[];
     /** Sonraki el kac saniye sonra dagitilacak? Mac bittiyse null. */
     readonly sonrakiElSn: number | null;
+    /** Mac bittiyse dagitilan cip ve deneyim; bitmediyse null. */
+    readonly macSonu: MacSonu | null;
   }) => void;
   'oyun:hata': (veri: { readonly reason: HataKodu | string; readonly hamleNo: number }) => void;
+  /** Bakiye ya da seviye degisti — yalnizca oyuncunun kisisel odasina. */
+  'oyuncu:cuzdan': (veri: CuzdanGorunumu) => void;
 }
 
 /** Sokete baglanan her istemcinin dogrulanmis kimligi. */

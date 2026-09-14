@@ -8,6 +8,7 @@
 // kurulabiliyor.
 
 import { Schema, model, type InferSchemaType, type Model } from 'mongoose';
+import { KADEME_KIMLIKLERI, VARSAYILAN_KADEME } from '@kut/ekonomi';
 
 export const MASA_DURUMLARI = ['bekliyor', 'oynaniyor', 'bitti'] as const;
 export type MasaDurumu = (typeof MASA_DURUMLARI)[number];
@@ -71,9 +72,22 @@ const masaSemasi = new Schema(
     /** Mac boyu birikmis puanlar; anahtar koltuk numarasi. */
     puanlar: { type: Map, of: Number, required: true, default: {} },
 
-    // --- Jeton ekonomisi (MVP'de 0, bkz. MIMARI.md) --------------------------
-    /** Masaya oturmak icin gereken jeton. 0 = bedava masa. */
+    // --- Cip ekonomisi (MIMARI.md §5.5) ---------------------------------------
+    /** Masanin kademesi; giris ve seviye kilidi buradan (`@kut/ekonomi`). */
+    kademe: { type: String, enum: KADEME_KIMLIKLERI, required: true, default: VARSAYILAN_KADEME },
+    /**
+     * Oyuncu basina giris. Kademeden turuyor ama ayrica yaziliyor: kademe
+     * tablosu degisirse oynanan masanin sozu degismesin.
+     */
     giris: { type: Number, required: true, default: 0, min: 0 },
+    /** El basladiginda tahsil edilen toplam. Odul bundan dagitilir. */
+    pot: { type: Number, required: true, default: 0, min: 0 },
+    /**
+     * Girisi tahsil edilen oyuncular. Sunucu mac ortasinda kapanirsa iade
+     * bunlara — ama yalnizca HALA oturanlara: kendi istegiyle kalkanin
+     * girisi yandi.
+     */
+    odeyenler: { type: [Schema.Types.ObjectId], ref: 'Oyuncu', required: true, default: [] },
 
     kapanmaZamani: { type: Date },
   },

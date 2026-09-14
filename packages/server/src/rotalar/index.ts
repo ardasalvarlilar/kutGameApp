@@ -32,7 +32,10 @@ import {
   kabul as arkadasKabul,
   sil as arkadasSil,
 } from '../denetleyiciler/arkadasDenetleyicisi.js';
+import { admob, hediye, hediyeAl } from '../denetleyiciler/cipDenetleyicisi.js';
+import * as yonetim from '../denetleyiciler/yonetimDenetleyicisi.js';
 import { kimlikDogrula } from '../araKatman/kimlikDogrula.js';
+import { yoneticiDogrula } from '../araKatman/yoneticiDogrula.js';
 import { oranSiniri } from '../araKatman/oranSiniri.js';
 
 /** `async` denetleyiciyi Express'in hata zincirine baglar. */
@@ -99,6 +102,29 @@ export function rotalariKur(): Router {
   rota.post('/arkadas/istek', kimlikDogrula, genelSinir, sar(arkadasIstegi));
   rota.post('/arkadas/kabul', kimlikDogrula, genelSinir, sar(arkadasKabul));
   rota.post('/arkadas/sil', kimlikDogrula, genelSinir, sar(arkadasSil));
+
+  // Hediye cip (@kut/ekonomi hediye.ts). Toplama atomik; sinir yalnizca
+  // gereksiz yuku kesiyor, cift toplamayi filtre engelliyor.
+  rota.get('/cip/hediye', kimlikDogrula, genelSinir, sar(hediye));
+  rota.post('/cip/hediye', kimlikDogrula, genelSinir, sar(hediyeAl));
+
+  // AdMob odullu reklam geri cagrisi — kimlik yok, imza var (reklamServisi).
+  rota.get('/reklam/admob', genelSinir, sar(admob));
+
+  // Yonetim paneli (/yonetim). Kapi iki katli: gecerli jeton VE admin rolu
+  // (rol her istekte veritabanindan okunuyor — araKatman/yoneticiDogrula.ts).
+  const y = [kimlikDogrula, yoneticiDogrula, genelSinir];
+  rota.get('/yonetim/ben', ...y, sar(yonetim.ben));
+  rota.get('/yonetim/ozet', ...y, sar(yonetim.ozet));
+  rota.get('/yonetim/oyuncular', ...y, sar(yonetim.oyuncular));
+  rota.get('/yonetim/oyuncular/:id', ...y, sar(yonetim.oyuncu));
+  rota.patch('/yonetim/oyuncular/:id', ...y, sar(yonetim.duzenle));
+  rota.post('/yonetim/oyuncular/:id/cip', ...y, sar(yonetim.cip));
+  rota.post('/yonetim/oyuncular/:id/aski', ...y, sar(yonetim.aski));
+  rota.delete('/yonetim/oyuncular/:id', ...y, sar(yonetim.sil));
+  rota.get('/yonetim/sikayetler', ...y, sar(yonetim.sikayetler));
+  rota.patch('/yonetim/sikayetler/:id', ...y, sar(yonetim.sikayetDurumu));
+  rota.get('/yonetim/kayitlar', ...y, sar(yonetim.kayitlar));
 
   return rota;
 }

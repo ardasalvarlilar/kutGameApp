@@ -6,12 +6,26 @@ import { uygulamayiKur } from './app.js';
 import { config } from './config.js';
 import { kayit } from './kayit.js';
 import { soketiKur, kapanisaGec, oturumlariKapat } from './soket/index.js';
+import {
+  baslangicHaklariniDoldur,
+  cipGocu,
+  hediyeSaatiGocu,
+} from './servisler/cuzdanServisi.js';
 import { yarimMasalariKapat } from './servisler/masaServisi.js';
+import { kurucuyuYetkilendir } from './servisler/yonetimServisi.js';
 import { postayiDogrula } from './servisler/postaServisi.js';
 import { veritabaniniAc, veritabaniniKapat } from './veritabani.js';
 
 async function baslat(): Promise<void> {
   await veritabaniniAc();
+
+  const tasinan = await cipGocu();
+  if (tasinan > 0) kayit.bilgi(`${tasinan} hesap cip ekonomisine tasindi`);
+  const hediyeSaati = await hediyeSaatiGocu();
+  if (hediyeSaati > 0) kayit.bilgi(`${hediyeSaati} hesabin hediye saati baslatildi`);
+  const cihazlar = await baslangicHaklariniDoldur();
+  if (cihazlar > 0) kayit.bilgi(`${cihazlar} cihaz baslangic cipini almis sayildi`);
+  if (await kurucuyuYetkilendir()) kayit.bilgi('Kurucu hesaba yonetici rolu verildi');
 
   // Canli oyun durumu bellekte duruyor (servisler/oyunServisi.ts). Sunucu
   // yeniden baslayinca o durum gitti; Mongo'da "oynaniyor" kalan masa artik

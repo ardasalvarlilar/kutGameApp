@@ -4,11 +4,35 @@
 // normal biter. Soket katmani bunu bekletmeden cagirir (`void`), hatasini
 // yutar; oyunu bir Mongo yazmasi durdurmamali.
 //
-// Not: `cuzdan` MVP'de yazilmiyor (MIMARI.md §5.5) — jeton kararinin
-// gerekcesi orada.
+// Cip bakiyesi burada DEGIL (servisler/cuzdanServisi.ts): bakiye yazmasi
+// yutulamaz, sayac yazmasi yutulabilir.
 
+import { seviyeHesapla } from '@kut/ekonomi';
 import { Oyuncu } from '../modeller/Oyuncu.js';
 import { kayit } from '../kayit.js';
+
+/**
+ * Mac deneyimini ekler ve seviyeyi deneyimden yeniden hesaplar.
+ *
+ * Seviye `$max` ile yaziliyor: iki yazma yarissa bile geri dusmez. Ayri
+ * alan olarak saklaniyor cunku masaya oturma kontrolu onu okuyor.
+ */
+export async function deneyimEkle(oyuncuId: string, miktar: number): Promise<void> {
+  try {
+    const guncel = await Oyuncu.findOneAndUpdate(
+      { _id: oyuncuId },
+      { $inc: { 'ilerleme.deneyim': miktar } },
+      { new: true, projection: { ilerleme: 1 } },
+    );
+    if (guncel === null) return;
+    await Oyuncu.updateOne(
+      { _id: oyuncuId },
+      { $max: { 'ilerleme.seviye': seviyeHesapla(guncel.ilerleme.deneyim) } },
+    );
+  } catch (hata) {
+    kayit.uyari('Deneyim yazilamadi', hata);
+  }
+}
 
 export interface ElSayaci {
   readonly oyuncuIdler: readonly string[];

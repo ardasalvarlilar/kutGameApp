@@ -18,9 +18,12 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { config } from '../config.js';
+import { CipHareketi } from '../modeller/CipHareketi.js';
 import { Oyuncu, type OyuncuBelgesi } from '../modeller/Oyuncu.js';
 import { AD_SORUN_METINLERI, adSorunu } from './adFiltresi.js';
 import { iliskileriTemizle } from './arkadasServisi.js';
+import { BASLANGIC_CIPI } from '@kut/ekonomi';
+import { baslangicHakkiKullan, baslangicKaydet } from './cuzdanServisi.js';
 import { hesapSilindiBildir, parolaKoduGonder } from './postaServisi.js';
 
 /** bcrypt tur sayisi. 10 mobil girislerde ~60ms; daha yuksegi girisi yavaslatir. */
@@ -133,7 +136,8 @@ export function oyuncuOzeti(oyuncu: OyuncuBelgesi & { _id: unknown }) {
     // Tembel uretiliyor (servisler/arkadasServisi.ts); henuz yoksa null.
     arkadasKodu: oyuncu.arkadasKodu ?? null,
     seviye: oyuncu.ilerleme.seviye,
-    jeton: oyuncu.cuzdan.jeton,
+    deneyim: oyuncu.ilerleme.deneyim,
+    cip: oyuncu.cuzdan.cip,
     oynananEl: oyuncu.ilerleme.oynananEl,
     kazanilanEl: oyuncu.ilerleme.kazanilanEl,
     oynananMac: oyuncu.ilerleme.oynananMac,
@@ -166,11 +170,15 @@ export async function misafirGirisi(girdi: MisafirGirisi): Promise<GirisSonucu> 
     return { jeton: jetonUret(String(mevcut._id)), oyuncu: mevcut };
   }
 
+  // Baslangic cipi CIHAZ basina bir kez (cuzdanServisi.baslangicHakkiKullan).
+  const hakVar = await baslangicHakkiKullan(girdi.cihazKimligi);
   const yeni = await Oyuncu.create({
     ad: girdi.ad ?? varsayilanAd(girdi.cihazKimligi),
     misafirMi: true,
     saglayicilar: [{ tip: 'misafir', disKimlik: girdi.cihazKimligi }],
+    cuzdan: { cip: hakVar ? BASLANGIC_CIPI : 0 },
   });
+  if (hakVar) await baslangicKaydet(String(yeni._id));
   return { jeton: jetonUret(String(yeni._id)), oyuncu: yeni };
 }
 
@@ -205,13 +213,17 @@ export async function kayitOl(girdi: Kayit): Promise<GirisSonucu> {
     return { jeton: jetonUret(String(misafir._id)), oyuncu: misafir };
   }
 
+  // Ayni telefonda ikinci e-posta hesabi baslangic cipi ALMAZ.
+  const hakVar = await baslangicHakkiKullan(girdi.cihazKimligi);
   const yeni = await Oyuncu.create({
     ad: girdi.ad,
     eposta: girdi.eposta,
     parolaOzeti: ozet,
     misafirMi: false,
     saglayicilar: [{ tip: 'parola', disKimlik: girdi.eposta, eposta: girdi.eposta }],
+    cuzdan: { cip: hakVar ? BASLANGIC_CIPI : 0 },
   });
+  if (hakVar) await baslangicKaydet(String(yeni._id));
   return { jeton: jetonUret(String(yeni._id)), oyuncu: yeni };
 }
 
@@ -436,6 +448,8 @@ export async function hesabiSil(oyuncuId: string): Promise<void> {
   // Arkadasliklar da gitsin: kalirsa karsi tarafin listesinde adi
   // cozulemeyen bir kayit durur ve kotasindan yer kaplar.
   await iliskileriTemizle(String(oyuncu._id));
+  // Cip defteri de kisisel veri: kime ait oldugunu gosteren bir kayit.
+  await CipHareketi.deleteMany({ oyuncu: oyuncu._id });
 
   if (eposta !== null) await hesapSilindiBildir(eposta, ad);
 }

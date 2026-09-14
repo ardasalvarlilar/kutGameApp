@@ -28,6 +28,7 @@ import type {
   ElSonuVerisi,
   GorunumVerisi,
   HataVerisi,
+  KademeKimligi,
   MasaGorunumu,
   SureGorunumu,
 } from './protokol';
@@ -43,9 +44,9 @@ export interface CevrimiciMasa {
   readonly hata: string | null;
   readonly hatayiSil: () => void;
 
-  readonly masaKur: (ozel?: boolean) => Promise<void>;
+  readonly masaKur: (ozel: boolean, kademe: KademeKimligi) => Promise<void>;
   readonly masayaKatil: (kod: string) => Promise<void>;
-  readonly hizliOyna: () => Promise<void>;
+  readonly hizliOyna: (kademe: KademeKimligi) => Promise<void>;
   /** MASA BUL: oturulabilecek acik masalar. Masaya OTURTMAZ, yalnizca listeler. */
   readonly acikMasalar: () => Promise<readonly AcikMasaOzeti[]>;
   readonly hazirOl: (hazir: boolean) => Promise<void>;
@@ -222,14 +223,18 @@ export function useCevrimiciMasa(soket: Socket | null, bagli: boolean): Cevrimic
   );
 
   const masaKur = useCallback(
-    async (ozel = true): Promise<void> => istek('masa:kur', { ozel }),
+    async (ozel: boolean, kademe: KademeKimligi): Promise<void> =>
+      istek('masa:kur', { ozel, kademe }),
     [istek],
   );
   const masayaKatil = useCallback(
     async (kod: string): Promise<void> => istek('masa:katil', { kod: kod.trim().toUpperCase() }),
     [istek],
   );
-  const hizliOyna = useCallback(async (): Promise<void> => istek('masa:hizli'), [istek]);
+  const hizliOyna = useCallback(
+    async (kademe: KademeKimligi): Promise<void> => istek('masa:hizli', { kademe }),
+    [istek],
+  );
 
   // MASA BUL, `istek`ten GECMIYOR: o, donen `masa` alanini masaya oturmus
   // saymak icin var. Listeye bakmak masaya oturmak degil — oyuncu hala lobide.
@@ -314,6 +319,7 @@ export function useCevrimiciMasa(soket: Socket | null, bagli: boolean): Cevrimic
       siraSuresi: sure?.sure ?? VARSAYILAN_AYARLAR.siraSureleriMs[0] ?? 30_000,
       macPuanlari,
       macKazananlari: elSonu?.macKazananlari ?? [],
+      macSonu: elSonu?.macSonu ?? null,
       turArasiSn: elSonu?.sonrakiElSn ?? null,
       // Sonraki eli SUNUCU dagitiyor. null, ekrana "dugme koyma, geri sayim
       // goster" diyor (src/surucu.ts).

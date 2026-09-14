@@ -9,8 +9,9 @@
 // vermezler ama uygulama sessizce yanlis calisir — bu yuzden not burada.
 
 import type { Aksiyon, ElSonucu, OyuncuGorunumu, OyuncuId } from '@kut/engine';
+import type { KademeKimligi } from '@kut/ekonomi';
 
-export type { Aksiyon, OyuncuGorunumu, OyuncuId };
+export type { Aksiyon, KademeKimligi, OyuncuGorunumu, OyuncuId };
 
 export interface KoltukGorunumu {
   readonly no: OyuncuId;
@@ -47,6 +48,11 @@ export interface MasaGorunumu {
   readonly koltuklar: readonly KoltukGorunumu[];
   readonly koltukTalepleri: readonly KoltukTalebiGorunumu[];
   readonly puanlar: Readonly<Record<number, number>>;
+  readonly kademe: KademeKimligi;
+  /** Oyuncu basina giris (cip). */
+  readonly giris: number;
+  /** El basladiysa tahsil edilen toplam; baslamadiysa 0. */
+  readonly pot: number;
 }
 
 /** MASA BUL listesindeki bir satir. Ozel masalar bu listeye girmez. */
@@ -56,6 +62,40 @@ export interface AcikMasaOzeti {
   readonly kapasite: number;
   readonly oyuncular: readonly string[];
   readonly benimMi: boolean;
+  readonly kademe: KademeKimligi;
+  readonly giris: number;
+}
+
+/** Mac sonunda koltuk basina kazanilan cip ve deneyim; kazanmayan 0. */
+export interface MacSonu {
+  readonly cip: Readonly<Record<number, number>>;
+  readonly deneyim: Readonly<Record<number, number>>;
+}
+
+/** `GET /cip/hediye` — biriken hediye cip (@kut/ekonomi hediye.ts). */
+export interface HediyeDurumu {
+  readonly miktar: number;
+  readonly saat: number;
+  readonly tavanda: boolean;
+  /** Sonraki saatin dolmasina kalan ms; tavandaysa null. */
+  readonly sonrakiSaatMs: number | null;
+  readonly saatlik: number;
+  readonly tavanSaat: number;
+  readonly reklamCarpani: number;
+}
+
+/** `POST /cip/hediye` — toplanan miktar ve reklamla bozdurulabilecek fis. */
+export interface HediyeSonucu {
+  readonly kazanilan: number;
+  readonly cip: number;
+  readonly fis: { readonly kimlik: string; readonly ekMiktar: number; readonly sonKullanma: string };
+}
+
+/** Bakiye ya da seviye degisince sunucunun yolladigi ozet (`oyuncu:cuzdan`). */
+export interface CuzdanGorunumu {
+  readonly cip: number;
+  readonly seviye: number;
+  readonly deneyim: number;
 }
 
 export interface SureGorunumu {
@@ -70,6 +110,8 @@ export interface ElSonuVerisi {
   readonly masa: MasaGorunumu;
   readonly macKazananlari: readonly OyuncuId[];
   readonly sonrakiElSn: number | null;
+  /** Mac bittiyse dagitilan cip ve deneyim; bitmediyse null. */
+  readonly macSonu: MacSonu | null;
 }
 
 export interface GorunumVerisi {
@@ -101,7 +143,10 @@ export interface OyuncuOzeti {
    */
   readonly arkadasKodu: string | null;
   readonly seviye: number;
-  readonly jeton: number;
+  /** Toplam deneyim; seviye bundan turuyor (@kut/ekonomi seviye.ts). */
+  readonly deneyim: number;
+  /** Oyun ici cip. Gercek paraya cevrilemez. */
+  readonly cip: number;
   readonly oynananEl: number;
   readonly kazanilanEl: number;
   readonly oynananMac: number;

@@ -7,6 +7,7 @@ import { config } from './config.js';
 import { bulunamadi, hataYakala } from './araKatman/hataYakala.js';
 import { rotalariKur } from './rotalar/index.js';
 import { sayfalariKur } from './rotalar/sayfalar.js';
+import { yonetimPaneliniKur } from './rotalar/yonetimPaneli.js';
 
 export function uygulamayiKur(): Express {
   const app = express();
@@ -28,6 +29,8 @@ export function uygulamayiKur(): Express {
   app.use(express.json({ limit: '64kb' }));
 
   app.use('/api', rotalariKur());
+  // Yonetim paneli — web'den, uygulamada karsiligi yok (rotalar/yonetimPaneli.ts).
+  app.use(yonetimPaneliniKur());
   // Gizlilik / kosullar / destek — App Store Connect bu URL'leri istiyor ve
   // ucunun de gercekten acilmasi gerekiyor (rotalar/sayfalar.ts).
   app.use('/', sayfalariKur());

@@ -12,12 +12,16 @@
 // MIMARI.md §4 e-posta+parolayi "sonraya" birakmisti; karar degisti, cunku
 // arkadaslar iki cihazda ayni hesapla girmek istiyor. Not orada guncellendi.
 //
-// `cuzdan` ve `ilerleme` MVP'de OKUNMUYOR ama simdiden duruyorlar: sonradan
-// alan eklemek, uzerinde veri olan bir koleksiyonda gocmen isi cikarir.
+// `cuzdan` ve `ilerleme` cip ekonomisini tasiyor (MIMARI.md §5.5). Kurallar
+// `@kut/ekonomi`de; burada yalnizca bakiye ve sayaclar duruyor.
 
 import { Schema, model, type InferSchemaType, type Model } from 'mongoose';
+import { BASLANGIC_CIPI } from '@kut/ekonomi';
 
 export const SAGLAYICILAR = ['misafir', 'parola', 'google', 'apple'] as const;
+
+export const ROLLER = ['oyuncu', 'admin'] as const;
+export type Rol = (typeof ROLLER)[number];
 export type Saglayici = (typeof SAGLAYICILAR)[number];
 
 const saglayiciSemasi = new Schema(
@@ -31,12 +35,22 @@ const saglayiciSemasi = new Schema(
   { _id: false },
 );
 
+// Alanin adi eskiden `jeton`du. "Jeton" bu kodda zaten oturum jetonu (JWT)
+// demek; ikisi aramada ve loglarda birbirine karisiyordu. Eski belgeler
+// acilista `cipGocu` ile tasiniyor (servisler/cuzdanServisi.ts).
 const cuzdanSemasi = new Schema(
   {
-    /** Oyun ici jeton. Gercek paraya CEVRILEMEZ — bu ayrim hukuki. */
-    jeton: { type: Number, required: true, default: 0, min: 0 },
-    /** Satin alinan toplam jeton; istatistik ve destek icin. */
+    /**
+     * Oyun ici cip. Gercek paraya CEVRILEMEZ — bu ayrim hukuki (MIMARI.md §5.5).
+     *
+     * Varsayilan baslangic cipi, ama hesap acan iki yol (kimlikServisi) onu
+     * CIHAZ basina bir kez veriyor ve gerekirse 0 ile aciyor (BaslangicHakki).
+     */
+    cip: { type: Number, required: true, default: BASLANGIC_CIPI, min: 0 },
+    /** Satin alinan toplam cip; istatistik ve destek icin. */
     toplamAlinan: { type: Number, required: true, default: 0, min: 0 },
+    /** Hediye cipin en son toplandigi an; birikim buradan sayiliyor (@kut/ekonomi hediye.ts). */
+    sonHediye: { type: Date, required: true, default: Date.now },
   },
   { _id: false },
 );
@@ -106,6 +120,13 @@ const oyuncuSemasi = new Schema(
     misafirMi: { type: Boolean, required: true, default: true },
 
     /**
+     * Yonetim paneline (`/yonetim`) girebilir mi? Admin AYNI ZAMANDA oyuncu:
+     * ayri bir hesap turu degil, oyuncu belgesinde bir rol. Uygulama bu alani
+     * hic okumuyor. Kurucu (`KURUCU_EPOSTA`) rolden bagimsiz her zaman admin.
+     */
+    rol: { type: String, enum: ROLLER, required: true, default: 'oyuncu' },
+
+    /**
      * ARKADAS KODU — "KUT-7F3A9" gibi. Baskasinin seni bulmasinin yolu bu.
      *
      * Neden ad ya da e-posta ile aranmiyor:
@@ -122,7 +143,7 @@ const oyuncuSemasi = new Schema(
 
     saglayicilar: { type: [saglayiciSemasi], required: true, default: [] },
 
-    // --- Jeton ekonomisi (MVP'de kullanilmiyor, bkz. MIMARI.md) --------------
+    // --- Cip ekonomisi (MIMARI.md §5.5) ---------------------------------------
     cuzdan: { type: cuzdanSemasi, required: true, default: () => ({}) },
     ilerleme: { type: ilerlemeSemasi, required: true, default: () => ({}) },
 

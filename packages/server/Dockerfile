@@ -23,6 +23,7 @@ RUN corepack enable
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY packages/engine/package.json packages/engine/
 COPY packages/politika/package.json packages/politika/
+COPY packages/ekonomi/package.json packages/ekonomi/
 COPY packages/server/package.json packages/server/
 # apps/mobile'in yalnizca MANIFESTI: lockfile onu tanidigi icin dosya yoksa
 # `--frozen-lockfile` "lockfile guncel degil" diye kirilir. Kodu kopyalanmiyor
@@ -35,6 +36,7 @@ RUN pnpm install --frozen-lockfile --filter @kut/server...
 COPY tsconfig.base.json ./
 COPY packages/engine packages/engine
 COPY packages/politika packages/politika
+COPY packages/ekonomi packages/ekonomi
 COPY packages/server packages/server
 
 RUN pnpm --filter @kut/server build
@@ -53,6 +55,9 @@ RUN addgroup -S kut && adduser -S kut -G kut
 COPY --from=derleme --chown=kut:kut /paket/node_modules ./node_modules
 COPY --from=derleme --chown=kut:kut /uygulama/packages/server/dist ./dist
 COPY --from=derleme --chown=kut:kut /uygulama/packages/server/package.json ./package.json
+# Yonetim paneli: duz HTML/JS, derlenmiyor. Sunucu onu calisma klasorunun
+# `yonetim/` alt klasorunden veriyor (rotalar/yonetimPaneli.ts).
+COPY --from=derleme --chown=kut:kut /uygulama/packages/server/yonetim ./yonetim
 USER kut
 
 EXPOSE 4000

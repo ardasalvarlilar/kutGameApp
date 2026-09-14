@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@kut/ekonomi": "workspace:*",
     "@kut/engine": "workspace:*",
     "@kut/politika": "workspace:*",
     "bcryptjs": "^2.4.3",

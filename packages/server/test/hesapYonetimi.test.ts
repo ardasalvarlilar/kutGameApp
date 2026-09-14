@@ -91,6 +91,10 @@ async function hesapAc(etiket: string): Promise<Hesap> {
     eposta,
     parola: 'parolam1234',
     ad: etiket.slice(0, 12),
+    // Uygulama kayitta cihaz kimligini HEP gonderiyor; baslangic cipi cihaz
+    // basina veriliyor (cuzdanServisi.baslangicHakkiKullan). Gondermeseydik
+    // hesap 0 ciple acilir ve masaya oturamazdi.
+    cihazKimligi: `cihaz-${eposta}`,
   });
   const veri = cevap.veri as { jeton: string; oyuncu: { id: string } };
   return { id: veri.oyuncu.id, jeton: veri.jeton, eposta };

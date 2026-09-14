@@ -17,6 +17,9 @@ importers:
       '@expo/metro-runtime':
         specifier: ~6.1.2
         version: 6.1.2(expo@54.0.37)(react-dom@19.1.0(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.7(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0)
+      '@kut/ekonomi':
+        specifier: workspace:*
+        version: link:../../packages/ekonomi
       '@kut/engine':
         specifier: workspace:*
         version: link:../../packages/engine
@@ -26,6 +29,9 @@ importers:
       expo:
         specifier: ~54.0.0
         version: 54.0.37(@babel/core@7.29.7(supports-color@8.1.1))(@expo/dom-webview@57.0.1)(@expo/metro-runtime@6.1.2)(react-native@0.81.5(@babel/core@7.29.7(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0)(supports-color@8.1.1)(typescript@5.9.3)
+      expo-application:
+        specifier: ~7.0.8
+        version: 7.0.8(expo@54.0.37)
       expo-audio:
         specifier: ~1.1.1
         version: 1.1.1(expo-asset@12.0.13(expo@54.0.37)(react-native@0.81.5(@babel/core@7.29.7(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0)(supports-color@8.1.1)(typescript@5.9.3))(expo@54.0.37)(react-native@0.81.5(@babel/core@7.29.7(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0)
@@ -76,6 +82,18 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.20.1)(lightningcss@1.33.0)(supports-color@8.1.1)(terser@5.51.0)
 
+  packages/ekonomi:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.20.1
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.20.1)(lightningcss@1.33.0)(supports-color@8.1.1)(terser@5.51.0)
+
   packages/engine:
     devDependencies:
       '@types/node':
@@ -106,6 +124,9 @@ importers:
 
   packages/server:
     dependencies:
+      '@kut/ekonomi':
+        specifier: workspace:*
+        version: link:../ekonomi
       '@kut/engine':
         specifier: workspace:*
         version: link:../engine

@@ -20,12 +20,17 @@ import {
   Text,
   View,
 } from 'react-native';
+import { kademeBul } from '@kut/ekonomi';
 import { AnaDugme, Hata } from './Alan';
 import type { AcikMasaOzeti } from '../ag/protokol';
+import { cipKisa } from '../cip';
 import { useCeviri } from '../dil';
+import { KADEME_ADLARI, KADEME_RENKLERI } from '../kademeGorunumu';
 import { golge, renkler } from '../tema';
 
 export interface MasaBulOzellikleri {
+  /** Kilitli kademedeki masalar listede kaliyor ama oturulamiyor. */
+  readonly seviye: number;
   readonly masalariGetir: () => Promise<readonly AcikMasaOzeti[]>;
   readonly onKatil: (kod: string) => void;
   /** Hic acik masa yoksa oyuncu buradan kendi acik masasini acar. */
@@ -36,6 +41,7 @@ export interface MasaBulOzellikleri {
 }
 
 export function MasaBul({
+  seviye,
   masalariGetir,
   onKatil,
   onMasaAc,
@@ -97,32 +103,45 @@ export function MasaBul({
 
       {masalar !== null && masalar.length > 0 ? (
         <ScrollView contentContainerStyle={stil.liste}>
-          {masalar.map((masa) => (
-            <Pressable
-              key={masa.kod}
-              onPress={mesgul ? undefined : () => onKatil(masa.kod)}
-              style={({ pressed }) => [
-                stil.satir,
-                mesgul && stil.satirPasif,
-                pressed && !mesgul && stil.satirBasili,
-              ]}
-            >
-              <View style={stil.satirSol}>
-                <Text style={stil.oyuncular} numberOfLines={1}>
-                  {masa.oyuncular.join(' · ')}
-                </Text>
-                <Text style={stil.kod}>{t('masaBul.masaKodu', { kod: masa.kod })}</Text>
-              </View>
-              <View style={stil.satirSag}>
-                <Text style={stil.sayi}>
-                  {masa.oyuncuSayisi}/{masa.kapasite}
-                </Text>
-                <Text style={stil.katilYazi}>
-                  {t(masa.benimMi ? 'masaBul.masanaDon' : 'masaBul.katil')}
-                </Text>
-              </View>
-            </Pressable>
-          ))}
+          {masalar.map((masa) => {
+            const minSeviye = kademeBul(masa.kademe).minSeviye;
+            const kilitli = !masa.benimMi && seviye < minSeviye;
+            const pasif = mesgul || kilitli;
+            return (
+              <Pressable
+                key={masa.kod}
+                onPress={pasif ? undefined : () => onKatil(masa.kod)}
+                style={({ pressed }) => [
+                  stil.satir,
+                  pasif && stil.satirPasif,
+                  pressed && !pasif && stil.satirBasili,
+                ]}
+              >
+                <View style={stil.satirSol}>
+                  <Text style={stil.oyuncular} numberOfLines={1}>
+                    {masa.oyuncular.join(' · ')}
+                  </Text>
+                  <Text style={[stil.kademe, { color: KADEME_RENKLERI[masa.kademe] }]}>
+                    {t('masaBul.kademeBilgisi', {
+                      kademe: t(KADEME_ADLARI[masa.kademe]),
+                      giris: cipKisa(masa.giris),
+                    })}
+                  </Text>
+                  <Text style={stil.kod}>{t('masaBul.masaKodu', { kod: masa.kod })}</Text>
+                </View>
+                <View style={stil.satirSag}>
+                  <Text style={stil.sayi}>
+                    {masa.oyuncuSayisi}/{masa.kapasite}
+                  </Text>
+                  <Text style={stil.katilYazi}>
+                    {kilitli
+                      ? t('masaBul.kilitli', { seviye: minSeviye })
+                      : t(masa.benimMi ? 'masaBul.masanaDon' : 'masaBul.katil')}
+                  </Text>
+                </View>
+              </Pressable>
+            );
+          })}
 
           <View style={stil.listeAlti}>
             <Text style={stil.bilgiKucuk}>{t('masaBul.begenmedin')}</Text>
@@ -170,6 +189,7 @@ const stil = StyleSheet.create({
   satirBasili: { transform: [{ scale: 0.985 }], opacity: 0.9 },
   satirSol: { flex: 1, gap: 2 },
   oyuncular: { color: renkler.metin, fontSize: 14, fontWeight: '700' },
+  kademe: { fontSize: 11, fontWeight: '800' },
   kod: { color: renkler.metinSolgun, fontSize: 10, letterSpacing: 1 },
   satirSag: { alignItems: 'flex-end', gap: 2 },
   sayi: { color: renkler.vurgu, fontSize: 18, fontWeight: '900' },

@@ -412,6 +412,8 @@ export function useOyun(
     macPuanlari,
     oynananEl,
     macKazananlari,
+    // Cevrimdisi masada cip yok: ne giris var ne odul.
+    macSonu: null,
     turArasiSn: TUR_ARASI_SN,
     adlar: yerelAdlar,
     // Motor bu cihazda kosuyor; kopacak bir baglanti yok.

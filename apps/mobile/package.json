@@ -13,9 +13,11 @@
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
+    "@kut/ekonomi": "workspace:*",
     "@kut/engine": "workspace:*",
     "@kut/politika": "workspace:*",
     "expo": "~54.0.0",
+    "expo-application": "~7.0.8",
     "expo-audio": "~1.1.1",
     "expo-constants": "~18.0.14",
     "expo-dev-client": "~6.0.21",

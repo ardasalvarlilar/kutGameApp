@@ -2,9 +2,10 @@
 //
 // Uygulamanin butun akisi tek bir yerde duruyor:
 //
-//   yukleniyor → giris → lobi → bekleme odasi → masa → (lobi)
+//   yukleniyor → giris → lobi → kademe secimi → bekleme odasi → masa → (lobi)
 //                          ├→ profil (hesap · arkadaslar · ayarlar)
-//                          ├→ masa bul
+//                          ├→ masa bul (→ kademe secimi)
+//                          ├→ magaza
 //                          └→ alistirma (cevrimdisi masa)
 //
 // Karar veren iki sey var: oturum (`useKimlik`) ve masa (`useCevrimiciMasa`).
@@ -16,9 +17,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, SafeAreaView, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { Bekleme } from './bilesenler/Bekleme';
 import { Giris } from './bilesenler/Giris';
+import { Hediye } from './bilesenler/Hediye';
+import { KademeSecimi, type KademeAmaci } from './bilesenler/KademeSecimi';
 import { Lobi } from './bilesenler/Lobi';
+import { Magaza } from './bilesenler/Magaza';
 import { Profil } from './bilesenler/Profil';
 import { MasaBul } from './bilesenler/MasaBul';
+import { hataMetni } from './hataMetinleri';
 import type { MasadakiOyuncu } from './bilesenler/Ayarlar';
 import { Masa } from './Masa';
 import { useCevrimiciMasa } from './ag/cevrimiciOyun';
@@ -35,7 +40,7 @@ import type { SikayetSebebi } from './ag/api';
 import { renkler } from './tema';
 
 /** Lobiden acilan yan ekranlar. */
-type YanEkran = 'yok' | 'profil' | 'alistirma' | 'masaBul';
+type YanEkran = 'yok' | 'profil' | 'alistirma' | 'masaBul' | 'kademe' | 'magaza';
 
 function Perde({ yazi }: { readonly yazi: string }) {
   return (
@@ -99,7 +104,30 @@ export function Uygulama() {
     'bilinmiyor' | 'sor' | 'ogreticili' | 'ogreticisiz'
   >('bilinmiyor');
 
+  /** Kademe secildiginde ne yapilacak: hizli eslesme mi, masa kurmak mi. */
+  const [kademeAmaci, setKademeAmaci] = useState<KademeAmaci>('hizli');
+
   const benimId = kimlik.oyuncu?.id ?? null;
+
+  // Masa ve sunucu hatalari KOD olarak geliyor; cumleye burada, ekranda
+  // cevriliyor (dil degisince metin de degissin diye — hataMetinleri.ts).
+  const hataYazisi = hataMetni(oda.hata, t);
+
+  // Kademe secip masaya oturunca secim ekrani isini bitirdi. Kapatmazsak
+  // masadan kalkan oyuncu lobi yerine kademe secimine donerdi.
+  const masadaMiyim = oda.masa !== null;
+  useEffect(() => {
+    if (masadaMiyim) setYanEkran((onceki) => (onceki === 'kademe' ? 'yok' : onceki));
+  }, [masadaMiyim]);
+
+  const kademeSec = useCallback(
+    (amac: KademeAmaci) => {
+      oda.hatayiSil();
+      setKademeAmaci(amac);
+      setYanEkran('kademe');
+    },
+    [oda],
+  );
 
   // Oturum degisince yan ekrani kapat.
   //
@@ -192,7 +220,7 @@ export function Uygulama() {
           masa={oda.masa}
           benimId={benimId}
           mesgul={oda.mesgul}
-          hata={oda.hata}
+          hata={hataYazisi}
           onHazir={(hazir) => void oda.hazirOl(hazir)}
           onCik={() => void oda.masadanCik()}
           onKoltugaGec={(koltuk) => void oda.koltugaGec(koltuk)}
@@ -268,13 +296,46 @@ export function Uygulama() {
       <SafeAreaView style={stil.ekran}>
         <StatusBar hidden />
         <MasaBul
+          seviye={kimlik.oyuncu?.seviye ?? 1}
           masalariGetir={oda.acikMasalar}
           onKatil={(kod) => void oda.masayaKatil(kod)}
-          onMasaAc={() => void oda.masaKur(false)}
+          onMasaAc={() => kademeSec('acik')}
           onKapat={() => setYanEkran('yok')}
           mesgul={oda.mesgul}
-          hata={oda.hata}
+          hata={hataYazisi}
         />
+      </SafeAreaView>
+    );
+  }
+
+  // KADEME SECIMI. Oturmayi basarirsa `oda.masa` dolar ve yukaridaki masa
+  // dali devralir; ekrani yukaridaki effect kapatiyor.
+  if (yanEkran === 'kademe') {
+    return (
+      <SafeAreaView style={stil.ekran}>
+        <StatusBar hidden />
+        <KademeSecimi
+          amac={kademeAmaci}
+          oyuncu={kimlik.oyuncu}
+          mesgul={oda.mesgul}
+          hata={hataYazisi}
+          onSec={(kademe) =>
+            void (kademeAmaci === 'hizli'
+              ? oda.hizliOyna(kademe)
+              : oda.masaKur(kademeAmaci === 'ozel', kademe))
+          }
+          onMagaza={() => setYanEkran('magaza')}
+          onKapat={() => setYanEkran('yok')}
+        />
+      </SafeAreaView>
+    );
+  }
+
+  if (yanEkran === 'magaza') {
+    return (
+      <SafeAreaView style={stil.ekran}>
+        <StatusBar hidden />
+        <Magaza cip={kimlik.oyuncu?.cip ?? 0} onKapat={() => setYanEkran('yok')} />
       </SafeAreaView>
     );
   }
@@ -286,10 +347,11 @@ export function Uygulama() {
         oyuncu={kimlik.oyuncu}
         bagli={kimlik.bagli}
         mesgul={oda.mesgul}
-        hata={oda.hata}
-        onHizli={() => void oda.hizliOyna()}
+        hata={hataYazisi}
+        onHizli={() => kademeSec('hizli')}
         onMasaBul={() => setYanEkran('masaBul')}
-        onMasaAc={() => void oda.masaKur(true)}
+        onMasaAc={() => kademeSec('ozel')}
+        onMagaza={() => setYanEkran('magaza')}
         onKatil={(kod) => void oda.masayaKatil(kod)}
         onAlistirma={() => {
           setYanEkran('alistirma');
@@ -305,6 +367,8 @@ export function Uygulama() {
         onProfil={() => setYanEkran('profil')}
         arkadaslar={kimlik.arkadaslar}
       />
+      {/* Hediye cip: lobinin ustunde duruyor, masada ve yan ekranlarda yok. */}
+      <Hediye />
     </SafeAreaView>
   );
 }

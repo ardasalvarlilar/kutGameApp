@@ -328,29 +328,141 @@ sunucuyu kendi üstünde çalıştırır, diğerleri IP ile bağlanır. Ama bunu
 
 ---
 
-## 5.5 Jeton ekonomisi — MVP'de YOK, altyapı hazır
+## 5.5 Çip ekonomisi
 
-Karar: **jeton MVP'ye girmiyor.** Şemalarda alanları duruyor
-(`oyuncu.cuzdan`, `oyuncu.ilerleme`, `masa.giris`) ama hiçbir yerde
-okunmuyor. Sebep, alanları sonradan eklemenin üzerinde veri olan bir
-koleksiyonda göç işi çıkarması.
+Her online maç çiple oynanıyor. Kuralların tek kaynağı `packages/ekonomi`
+(saf, testli); sunucu uyguluyor, istemci yalnızca gösteriyor.
 
-Neden şimdi değil:
+Para biriminin adı **çip**, jeton değil: "jeton" bu kodda zaten oturum jetonu
+(JWT) demek. Eski `cuzdan.jeton` alanı açılışta `cipGocu` ile taşınıyor.
 
-1. **Mağaza kuralları.** iOS ve Android'de dijital mal satışı kendi ödeme
-   sistemlerinden geçmek zorunda — komisyon %15–30. Kendi ödeme sağlayıcını
-   koyamazsın; koyarsan uygulama mağazadan kalkar.
-2. **Hukuki ayrım.** Jeton **gerçek paraya çevrilemez** olmalı. Okey 101 Plus
-   dahil bütün "sosyal casino" oyunlarının modeli bu. Kazanılan jeton nakde
-   dönüyorsa oyun kumar mevzuatına girer; hem mağazadan kalkarsın hem ciddi
-   yasal risk alırsın. Şema bunu `cuzdan.jeton` yorumunda not ediyor.
-3. **Sıra meselesi.** MVP'nin cevaplaması gereken soru "insanlar bunu oynuyor
-   mu?" — ödeme akışı o cevabı vermiyor, sadece geciktiriyor.
+**Kademeler** — maç uzunluğu sabit (16 tur), kademeyi giriş ve seviye ayırıyor:
 
-Eklendiğinde gerekecekler: `IAP` doğrulama ucu (Apple/Google makbuzu sunucuda
-doğrulanır, istemciye güvenilmez), `jetonHareketi` koleksiyonu (her artış ve
-azalış kayıtlı olmalı — destek ve itiraz için), masa girişinde bakiye kontrolü
-ve el sonunda dağıtım. Seviye/deneyim `oyuncu.ilerleme`de zaten duruyor.
+| Kademe | Giriş | Açıldığı seviye |
+|---|---|---|
+| Çaylak | 5.000 | 1 |
+| Amatör | 15.000 | 3 |
+| Tecrübeli | 50.000 | 6 |
+| Usta | 150.000 | 10 |
+| Profesyonel | 500.000 | 15 |
+| Şampiyon | 1.500.000 | 22 |
+| Efsane | 5.000.000 | 30 |
+
+Kilit yalnızca **alttan**: seviyen yettiği her kademeye oturursun. Ölçek
+bilerek büyük (Okey 101 Plus gibi) — gerçek paradaki karşılığı paketlerde.
+
+**Pot:** masaya oturan her insan girişi koyar, kazanan potu alır, pottan
+**%20 masa ücreti** kesilir (QT Okey'de bu oran %37–60). Dört insanlı masada
+kazanan girişin 3,2 katını alır. Beraberlikte havuz bölünür.
+
+**Botlar pota girmez.** Girseydi bot çipi sunucunun cebinden basılmış olurdu
+ve "üç botla oyna, kazan" çip basmanın yolu olurdu. Bot (ya da masadan kaçanın
+yerine geçen bot) kazanırsa payı yanar.
+
+**Giriş el başlarken tahsil ediliyor**, masaya otururken değil: bekleme
+odasından kalkana iade gerekmesin. Başlatma tek bir atomik
+`findOneAndUpdate` ile kilitleniyor (iki çağrı iki kez tahsil etmesin);
+tahsilat "hepsi ya da hiçbiri" — biri ödeyemezse ödeyenlere iade edilir,
+ödeyemeyen masadan kalkar, el başlamaz.
+
+**Masadan çıkış:**
+
+- Kendi isteğiyle (AYARLAR → masadan çık) → giriş **yanar**, koltuğu bot
+  oynar, ödül ve XP alamaz.
+- Bağlantı koparsa → giriş yanmaz. Koltuk duruyor (§3), sunucu yerine
+  oynuyor; geri gelip devam eder, kazanırsa potu alır.
+- Sunucu maç ortasında kapanırsa → açılışta `yarimMasalariKapat` hâlâ oturan
+  ödeyenlere iade eder. Masa önce atomik olarak kapanıyor, iade sonra: iade
+  sırasında yine düşerse ikinci kez iade edilmez. Maç sonunda da masa
+  `bitti` olarak **ödülden önce** yazılıyor — ödül ile iade ikisi birden
+  verilmesin.
+
+**Deneyim ve seviye:** tamamlanan maçta sıraya göre 100 / 75 / 50 / 25 XP.
+1→2 100 XP, her atlama 50 XP daha pahalı, en yüksek seviye 100.
+
+**Başlangıç:** yeni hesaba 15.000 çip — Çaylak'ta üç maç. Kazanan devam
+ediyor; kazanamayan satın alıyor ya da hediye çip bekliyor.
+
+Başlangıç çipi **cihaz başına bir kez** (`BaslangicHakki`, cihaz kimliğinin
+sha256 özeti; oyuncuya bağlı değil, hesap silinince de kalıyor). Hesabını
+silip yeniden açan ya da aynı telefonda ikinci e-posta hesabı açan 0 çiple
+başlar. Uygulamayı silip kuran ise yeni hesap bile açmıyor: cihaz kimliği
+yeniden kurulumda değişmiyor — iOS'ta Keychain uygulama silinse de kalıyor,
+Android'de kimlik ANDROID_ID'den türüyor (`ag/depo.ts`). Ekonomiden önce
+açılmış misafirler açılışta "almış" sayılıyor (`baslangicHaklariniDoldur`).
+
+**Hediye çip:** uzakta geçen her saat için 100 çip, en fazla 48 saat
+(4.800). Bir hafta gelmeyen 16.800 değil 4.800 alır — düzenli gelen daha
+çok toplar. Yalnızca tam saatler sayılıyor, artan dakikalar sonraki
+toplamaya kalıyor; tavanda fazlası yanıyor. Saat sunucunun; toplama atomik
+(`cuzdan.sonHediye` filtreli `findOneAndUpdate`). Lobide açılışta bir kez
+pencere çıkıyor (`bilesenler/Hediye.tsx`).
+
+**Ödüllü reklam (altyapı hazır, reklam yok):** her toplamada tek kullanımlık,
+30 dakikalık bir `ReklamFisi` kesiliyor (toplanan kadar ek çip = 2 kat).
+İstemci reklamı `serverSideVerificationOptions: { userId, customData:
+fisKimligi }` ile gösterecek; Google `/api/reklam/admob` ucunu imzalı
+çağırıyor, sunucu ECDSA imzasını Google'ın açık anahtarlarıyla doğrulayıp
+fişi bozduruyor. Aynı `transaction_id` ikinci kez çip vermiyor. İstemcinin
+"izledim" demesi hiçbir şey kazandırmıyor. Eksik olan yalnızca istemcideki
+reklam SDK'sı (`src/reklam.ts` — hazır olmadıkça "2 KAT" düğmesi görünmüyor)
+ve AdMob konsolunda SSV adresinin girilmesi.
+
+**Defter:** her artış ve azalış `cipHareketleri` koleksiyonunda (destek ve
+itiraz için); hesap silinince o da siliniyor.
+
+**Hukuki ayrım:** çip **gerçek paraya çevrilemez**. Okey 101 Plus dahil bütün
+"sosyal casino" oyunlarının modeli bu. Kazanılan çip nakde dönüyorsa oyun
+kumar mevzuatına girer.
+
+**Satın alma henüz yok.** Paketler (`ekonomi/paketler.ts`, 50 bin çip
+39,99 ₺ → 30 milyon 1.199,99 ₺) mağaza ekranında görünüyor ama düğme kapalı.
+Gerekenler: App Store Connect / Play Console'da ürün tanımları, istemcide IAP
+kütüphanesi (Expo Go'da çalışmaz, dev build ister), sunucuda makbuz doğrulama
+ucu (istemciye güvenilmez) ve `satin-alma` sebepli defter kaydı. iOS ve
+Android'de dijital mal satışı mağazanın ödeme sisteminden geçmek zorunda —
+komisyon %15–30.
+
+**Kalan risk:** cihaz kimliğini istemci gönderiyor; uygulamayı kullanmadan
+API'yi elle çağıran biri her istekte yeni bir kimlik uydurup yeni hesap
+açabilir. Bunu ancak cihaz doğrulaması kapatır (iOS App Attest, Android Play
+Integrity): sunucu, isteğin gerçekten mağazadan kurulmuş uygulamadan
+geldiğini kanıtlatır. Kötüye kullanım görülürse sıradaki adım bu.
+
+---
+
+## 5.6 Yönetim paneli
+
+Adres: `https://<alan-adı>/yonetim`. Uygulamada karşılığı **yok**; yasal
+sayfalar gibi sunucudan veriliyor (`rotalar/yonetimPaneli.ts`,
+`packages/server/yonetim/`). Düz HTML + JS, derleme adımı ve kütüphane yok.
+
+**Kim girer:** `Oyuncu.rol === 'admin'` olan, e-posta + parolalı hesaplar.
+Admin aynı zamanda oyuncu — ayrı bir hesap türü değil. Rol **her istekte
+veritabanından** okunuyor (`araKatman/yoneticiDogrula.ts`), jetondan değil:
+yetkisi alınan admin anında dışarıda kalır, askıya alınan admin giremez.
+
+**Kurucu:** `KURUCU_EPOSTA` ile kayıtlı hesap rolden bağımsız her zaman admin.
+İlk admin böyle oluşuyor. Kurucu panelden askıya alınamaz, silinemez, rolü
+düşürülemez; hiçbir admin kendine de bu üçünü yapamaz. İkisi birlikte
+"herkes kendini dışarıda bıraktı" durumunu imkânsız kılıyor.
+
+**İşlemler:** genel bakış (oyuncu, masa, dolaşımdaki çip, son 24 saatin çip
+akışı), oyuncu arama ve ayrıntısı (çip defteri, hakkındaki şikâyetler),
+düzenleme (ad, rol, deneyim), çip ekleme/çıkarma (gerekçe zorunlu, deftere
+`yonetici` sebebiyle yazılıyor), askıya alma (açık soket hemen kesiliyor),
+hesap silme (oyuncunun kendi silmesiyle aynı yol), şikâyet kuyruğu ve
+işlem kaydı.
+
+**İşlem kaydı** (`yonetimKayitlari`): her değiştiren işlem — kim, kime, ne,
+gerekçe. Hedefin adı saklanmıyor, yalnızca kimliği; silinen oyuncunun adı
+burada kalsaydı hesap silmenin "kişisel bilgilerin silinir" sözü bozulurdu.
+
+**Güvenlik:** oyuncu adları ve şikâyet metinleri panelde yalnızca metin
+düğümü olarak basılıyor (`innerHTML` yok) — "<script>" adlı bir oyuncu
+panelde kod çalıştıramaz. Betik ayrı dosyada, çünkü helmet'in içerik güvenliği
+politikası satır içi script'e izin vermiyor. Jeton `sessionStorage`da
+(sekme kapanınca gider). Sayfa `noindex` ve önbelleğe alınmıyor.
 
 ---
 
@@ -368,7 +480,9 @@ Her adım kendi başına çalışır durumda bırakır; yarım kalırsa oyun boz
 | 6 | Parola sıfırlama (SMTP), hesap silme, şikâyet/engelleme | **bitti** |
 | 7 | Google + Apple girişi | sonra |
 | 8 | Arkadaş listesi, davet | sonra |
-| 9 | Jeton ekonomisi (§5.5) | sonra |
+| 9 | Çip ekonomisi (§5.5) — kademe, pot, XP | **bitti** |
+| 10 | Uygulama içi satın alma (§5.5) | sonra |
+| 11 | Yönetim paneli (§5.6) | **bitti** |
 
 7. adım bugün **gerekmiyor**: Apple'ın "Sign in with Apple" şartı yalnızca
 başka bir **sosyal** giriş (Google, Facebook…) sunan uygulamalar için. Sadece

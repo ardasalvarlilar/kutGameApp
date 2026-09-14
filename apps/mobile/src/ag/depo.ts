@@ -7,6 +7,7 @@
 // Neden guvenli depo: jeton 30 gun gecerli ve tek basina hesabin ta kendisi.
 // Duz dosyada tutmak, cihazi eline geciren birine hesabi vermek demek.
 
+import { getAndroidId } from 'expo-application';
 import * as GuvenliDepo from 'expo-secure-store';
 import { Platform } from 'react-native';
 
@@ -74,9 +75,19 @@ export const ogreticiSorulduYaz = (): Promise<void> => yaz(OGRETICI_ANAHTARI, 'e
 /**
  * Cihaz kimligi — misafir hesabinin tek baglantisi.
  *
- * Uygulama silinip yeniden kurulursa bu kimlik de gider ve misafir oyuncu
- * ilerlemesini kaybeder. Kaybetmemenin yolu hesap acmak; uygulama bunu
- * lobide soyluyor.
+ * YENIDEN KURULUMDA DEGISMEMELI. Degisseydi uygulamayi silip kuran her
+ * seferinde yeni bir misafir hesabi ve 15 bin baslangic cipi alirdi; bu
+ * cipler maci kaybederek bir ana hesaba aktarilabiliyor.
+ *
+ *  - iOS: guvenli depo Keychain; uygulama silinse de kayit kaliyor, ayni
+ *    kimlik geri geliyor.
+ *  - Android: guvenli depo uygulamayla birlikte siliniyor. Yerine ANDROID_ID
+ *    kullaniliyor — ayni imzali uygulama icin ayni cihazda sabit, yalnizca
+ *    fabrika ayarlarinda degisiyor.
+ *
+ * Depoda eski (rastgele) bir kimlik varsa o kullanilmaya devam ediyor:
+ * mevcut misafirlerin hesabi kaybolmasin. Sunucu ayrica baslangic cipini
+ * cihaz basina bir kez veriyor (packages/server cuzdanServisi).
  */
 export async function cihazKimligi(): Promise<string> {
   const mevcut = await oku(CIHAZ_ANAHTARI);
@@ -84,7 +95,19 @@ export async function cihazKimligi(): Promise<string> {
 
   // Sunucu bunu yalnizca ARAMA ANAHTARI olarak kullaniyor, sir olarak degil;
   // `Math.random` yeterli. (Motorda rastgelelik yasak — burasi motor degil.)
-  const yeni = `cihaz-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+  const yeni =
+    androidKimligi() ??
+    `cihaz-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
   await yaz(CIHAZ_ANAHTARI, yeni);
   return yeni;
+}
+
+function androidKimligi(): string | null {
+  if (Platform.OS !== 'android') return null;
+  try {
+    const kimlik = getAndroidId();
+    return kimlik.length > 0 ? `android-${kimlik}` : null;
+  } catch {
+    return null;
+  }
 }

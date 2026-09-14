@@ -64,6 +64,12 @@ const sema = z.object({
   // acikken sart. Bos birakilirsa bildirimler yine gider.
   EXPO_PUSH_URL: z.string().default('https://exp.host/--/api/v2/push/send'),
   EXPO_ERISIM_JETONU: z.string().optional(),
+
+  // --- Yonetim paneli (/yonetim) --------------------------------------------
+  // Bu e-postayla kayitli hesap HER ZAMAN admin: panelden rolu alinamaz,
+  // askiya alinamaz, silinemez. Ilk admini olusturmanin yolu da bu — sonra
+  // panelden baskalarina rol verilebilir. Bos birakilirsa kurucu yok.
+  KURUCU_EPOSTA: z.string().default(''),
 });
 
 const sonuc = sema.safeParse(process.env);
@@ -94,6 +100,9 @@ export const config = {
   uygulamaAdi: ham.UYGULAMA_ADI,
   alanAdi: ham.ALAN_ADI,
   destekEposta: ham.DESTEK_EPOSTA,
+
+  /** Kucuk harfe indirgenmis; `Oyuncu.eposta` da oyle saklaniyor. */
+  kurucuEposta: ham.KURUCU_EPOSTA.trim().toLowerCase(),
 
   posta: {
     /** Ayarli mi? Degilse parola sifirlama kapali kalir. */

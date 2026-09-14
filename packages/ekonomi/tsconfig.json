@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    // Motor ve politika gibi `types: []`: ekonomi de saf kalmali — sunucu
+    // (otorite) ve istemci (gosterim) AYNI tabloyu okuyor.
+    "types": []
+  },
+  "include": ["src/**/*.ts"]
+}

@@ -24,7 +24,9 @@ yoksa dur ve sor.
 ```
 packages/engine/    # saf kural motoru — UI yok, ağ yok, I/O yok
 packages/politika/  # oyuncu politikası — bot, otomatik dizme, süre dolunca
+packages/ekonomi/   # çip ekonomisi — kademe, pot, masa ücreti, XP/seviye, paketler
 packages/server/    # otoriter oyun sunucusu — Express + Socket.io + MongoDB
+packages/server/yonetim/  # yönetim paneli (web, /yonetim) — düz HTML/JS
 apps/mobile/        # Expo uygulaması — sunucuya bağlı, online oynanıyor
 KURALLAR.md         # kuralların tek kaynağı
 MIMARI.md           # online mimarisi: soket, oda, hesap, sıra
@@ -50,6 +52,7 @@ pnpm -r test                        # tüm testler
 pnpm -r typecheck                   # tip kontrolü
 pnpm --filter @kut/engine test      # yalnızca motor
 pnpm --filter @kut/politika test    # yalnızca bot/dizme/süre politikası
+pnpm --filter @kut/ekonomi test     # yalnızca çip ekonomisi
 pnpm --filter @kut/mobile start     # Expo — telefonda Expo Go ile aç
 pnpm --filter @kut/mobile web       # tarayıcıda önizleme
 pnpm --filter @kut/server dev       # sunucu (önce packages/server/.env)
@@ -312,6 +315,21 @@ uygulamaya dönmek derin bağlantı (universal link) kurmayı gerektiriyor ve o,
 App Store için ayrı bir yapılandırma. Kod her cihazda aynı şekilde çalışıyor.
 SMTP ayarlanmamışsa sunucu yine açılır, yalnızca sıfırlama çalışmaz — oyun
 e-postasız da oynanıyor.
+
+### Yönetim paneli
+
+`https://<alan-adı>/yonetim` — web'den, uygulamada karşılığı yok. Ayrıntı
+MIMARI.md §5.6'da. Bilmen gereken üç şey:
+
+- **Admin bir rol** (`Oyuncu.rol`), ayrı hesap değil: admin oynamaya devam
+  ediyor. Rol her istekte veritabanından okunuyor, jetondan değil.
+- **Kurucu** (`KURUCU_EPOSTA`) her zaman admin ve panelden dokunulamaz; hiçbir
+  admin kendini de askıya alamaz ya da silemez.
+- **Panel JS'inde `innerHTML` yok** ve olmamalı: oyuncu adları oyuncudan
+  geliyor. Her şey `el()` yardımcısıyla metin düğümü olarak basılıyor.
+
+Panel dosyaları derlenmiyor, çalışma klasöründen veriliyor; Dockerfile onları
+imaja ayrıca kopyalıyor.
 
 ### Dağıtım
 
@@ -729,6 +747,44 @@ oynaması gerekiyor.
 Motorun üç kuralı burada da geçerli ve `types: []` ile derlemede zorlanıyor:
 saf, rastgeleliksiz, yalnızca `viewFor` projeksiyonunu okuyor. Bot insandan
 fazlasını görmüyor.
+
+### packages/ekonomi
+
+Oyunun **dışındaki** kurallar: kim hangi masaya oturur, pot nasıl bölünür,
+deneyim nasıl seviyeye döner. Motor bunları bilmiyor ve bilmemeli — çip bir
+oyun kuralı değil. Sunucu uyguluyor (otorite), istemci gösteriyor; ikisinin
+ayrı kopyası zamanla ayrışırdı. Ayrıntı ve gerekçeler MIMARI.md §5.5'te.
+
+| Dosya | İş |
+|---|---|
+| `kademeler.ts` | 7 kademe (Çaylak 5 bin → Efsane 5 milyon), seviye kilidi, başlangıç çipi |
+| `odul.ts` | Pot, %20 masa ücreti, kazanan payı |
+| `seviye.ts` | XP eğrisi (100, 150, 200…), maç sırasına göre 100/75/50/25 |
+| `paketler.ts` | Mağaza paketleri ve gösterim fiyatları |
+| `hediye.ts` | Saatte 100 çip, 48 saat tavanı, reklam çarpanı |
+
+Başlangıç çipi **cihaz başına bir kez** (sunucuda `BaslangicHakki`); cihaz
+kimliği yeniden kurulumda değişmiyor (Android'de ANDROID_ID, iOS'ta Keychain).
+Ödüllü reklamın ek çipini istemci değil, Google'ın imzalı geri çağrısı
+kazandırıyor (`reklamServisi.ts`); istemcideki takma noktası `src/reklam.ts`.
+
+Para biriminin kodda adı `cip`. **"Jeton" demeyin**: bu depoda jeton oturum
+jetonu (JWT) ve bildirim jetonu demek.
+
+Üç şey bilerek böyle:
+
+- **Botlar pota girmez.** Girseydi "üç botla oyna" çip basmanın yolu olurdu.
+  Bekleme odası ödülü oturan insan sayısından gösteriyor.
+- **Giriş el başlarken tahsil ediliyor** (`soket/index.ts` `gerekirseBaslat`),
+  masaya otururken değil; otururken yalnızca kontrol ediliyor. Başlatma
+  atomik kilitleniyor — katılma ve "hazır" aynı anda gelip ikisi de
+  tahsil etmesin.
+- **Kendi isteğiyle kalkanın girişi yanar, bağlantısı kopanınki yanmaz.**
+  Kalkanın koltuğu bota geçiyor ve bot koltuğu ödül/XP almıyor; kopanın
+  koltuğu duruyor.
+
+Satın alma henüz yok: mağaza ekranı (`bilesenler/Magaza.tsx`) paketleri
+gösteriyor, düğmesi kapalı. Sunucuda makbuz doğrulaması olmadan açılmamalı.
 
 ---
 

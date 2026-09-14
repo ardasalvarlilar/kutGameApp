@@ -108,6 +108,8 @@ services:
       SMTP_KULLANICI: ${SMTP_KULLANICI:-}
       SMTP_SIFRE: ${SMTP_SIFRE:-}
       SMTP_GONDEREN: ${SMTP_GONDEREN:-}
+      # Yönetim paneli (/yonetim): bu e-postalı hesap her zaman yönetici.
+      KURUCU_EPOSTA: ${KURUCU_EPOSTA:-}
     networks:
       - kut-ag
     # Sunucunun portu da dışarı açılmıyor: dışarıdan gelen her istek

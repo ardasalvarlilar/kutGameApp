@@ -7,9 +7,11 @@
 // farkli sehirde de ayni sekilde calisir ve hicbir ag iznine ihtiyac duymaz.
 
 import { Types } from 'mongoose';
+import { VARSAYILAN_KADEME, kademeBul, oturmaEngeli, type KademeKimligi } from '@kut/ekonomi';
 import { config } from '../config.js';
 import { BOT_ADLARI, Masa, type MasaBelgesi } from '../modeller/Masa.js';
 import { Oyuncu } from '../modeller/Oyuncu.js';
+import { cipEkle } from './cuzdanServisi.js';
 import { engelliBiriVarMi, engelliKimlikler } from './moderasyonServisi.js';
 import type { AcikMasaOzeti, KoltukGorunumu, MasaGorunumu } from '../tipler/protokol.js';
 import type { OyuncuId } from '@kut/engine';
@@ -106,7 +108,27 @@ export async function masaGorunumu(
       hedefKoltuk: talep.hedefKoltuk as OyuncuId,
     })),
     puanlar,
+    kademe: masa.kademe as KademeKimligi,
+    giris: masa.giris,
+    pot: masa.pot,
   };
+}
+
+/**
+ * Kademe kilidi ve bakiye (`@kut/ekonomi` oturmaEngeli). Oturamiyorsa hata.
+ *
+ * Masaya OTURURKEN soruluyor, el baslarken tahsil ediliyor: bekleme odasinda
+ * kalkan oyuncunun girisi iade gerektirmesin diye (bkz. soket/index.ts
+ * `gerekirseBaslat`).
+ */
+async function oturabilirMi(oyuncuId: string, kademe: KademeKimligi): Promise<void> {
+  const oyuncu = await Oyuncu.findById(oyuncuId).select('cuzdan ilerleme').lean();
+  if (oyuncu === null) throw new MasaHatasi('oyuncu-bulunamadi');
+  const engel = oturmaEngeli(
+    { seviye: oyuncu.ilerleme.seviye, cip: oyuncu.cuzdan.cip },
+    kademeBul(kademe),
+  );
+  if (engel !== null) throw new MasaHatasi(engel);
 }
 
 /** Oyuncunun icinde oldugu acik masa; yoksa null. */
@@ -159,6 +181,8 @@ export async function acikMasalar(oyuncuId: string): Promise<readonly AcikMasaOz
         .sort((a, b) => a.no - b.no)
         .map((koltuk) => adlar.get(String(koltuk.oyuncu)) ?? 'Oyuncu'),
       benimMi: masa.koltuklar.some((koltuk) => String(koltuk.oyuncu) === oyuncuId),
+      kademe: masa.kademe as KademeKimligi,
+      giris: masa.giris,
     }))
     .sort((a, b) => b.oyuncuSayisi - a.oyuncuSayisi);
 }
@@ -341,15 +365,22 @@ export async function koltukTalebiCevapla(oyuncuId: string, isteyenId: string, k
   return masa;
 }
 
-export async function masaKur(oyuncuId: string, ozel = true) {
+export async function masaKur(
+  oyuncuId: string,
+  ozel = true,
+  kademe: KademeKimligi = VARSAYILAN_KADEME,
+) {
   if ((await acikMasam(oyuncuId)) !== null) {
     throw new MasaHatasi('zaten-masadasin');
   }
+  await oturabilirMi(oyuncuId, kademe);
   const kod = await benzersizKod();
   return Masa.create({
     kod,
     sahip: new Types.ObjectId(oyuncuId),
     ozel,
+    kademe,
+    giris: kademeBul(kademe).giris,
     // Masayi acan koltugunda HAZIR baslar: dort kisi toplandiginda bir de
     // "ben hazirim" turu beklemek, dort arkadasin es zamanli olmasini
     // gerektiriyordu. Isteyen `masa:hazir` ile geri alabilir.
@@ -360,18 +391,23 @@ export async function masaKur(oyuncuId: string, ozel = true) {
 }
 
 /**
- * Hizli eslesme: kod bilmeden oynamak isteyeni bekleyen bir ACIK masaya
- * oturtur; yoksa yeni bir acik masa acar.
+ * Hizli eslesme: kod bilmeden oynamak isteyeni AYNI KADEMEDE bekleyen bir
+ * ACIK masaya oturtur; yoksa o kademede yeni bir acik masa acar.
  *
  * En dolu masa oncelikli (`koltuklar` cok olan): oyuncular tek bir masada
  * toplansin, dort ayri masada birer kisi beklemesin. Az oyuncu varken bu
  * fark, oyunun hic baslamamasiyla baslamasi arasindaki fark oluyor.
  */
-export async function hizliMasa(oyuncuId: string) {
+export async function hizliMasa(oyuncuId: string, kademe: KademeKimligi = VARSAYILAN_KADEME) {
   const mevcut = await acikMasam(oyuncuId);
   if (mevcut !== null) return mevcut;
 
-  const adaylar = await Masa.find({ durum: 'bekliyor', ozel: false }).sort({ createdAt: 1 });
+  // Once kontrol: aday masalari gezip her birinde ayni hatayi almak yerine.
+  await oturabilirMi(oyuncuId, kademe);
+
+  const adaylar = await Masa.find({ durum: 'bekliyor', ozel: false, kademe }).sort({
+    createdAt: 1,
+  });
   const siralanmis = adaylar
     .filter((masa) => masa.koltuklar.length < MASA_KAPASITESI)
     .sort((a, b) => b.koltuklar.length - a.koltuklar.length);
@@ -385,7 +421,7 @@ export async function hizliMasa(oyuncuId: string) {
     if (await engelliBiriVarMi(oyuncuId, oturanlar)) continue;
     return masayaKatil(masa.kod, oyuncuId);
   }
-  return masaKur(oyuncuId, false);
+  return masaKur(oyuncuId, false, kademe);
 }
 
 /** Ayni anda oturmaya calisan oyuncular icin kac kez denenecek. */
@@ -421,6 +457,9 @@ export async function masayaKatil(kod: string, oyuncuId: string) {
 
     const baskaMasa = await acikMasam(oyuncuId);
     if (baskaMasa !== null) throw new MasaHatasi('zaten-masadasin');
+
+    // Kodu bilmek kilidi acmaz: arkadasinin Efsane masasina Caylak oturamaz.
+    await oturabilirMi(oyuncuId, masa.kademe as KademeKimligi);
 
     const koltuk = bosKoltuk(masa);
     if (koltuk === null) throw new MasaHatasi('masa-dolu');
@@ -583,11 +622,37 @@ export function baslayabilirMi(masa: MasaBelgesi): boolean {
  * hatasi alir ve hicbir masaya oturamaz.
  *
  * El kayitlari SILINMEZ — onlar zaten kalici (modeller/ElKaydi.ts).
+ *
+ * Yarida kalan macin GIRISI IADE edilir: sunucunun cokmesi oyuncunun sucu
+ * degil. Yalnizca HALA oturanlara — kendi istegiyle kalkanin girisi zaten
+ * yanmisti (koltugu bota gecti, `odeyenler`de duruyor ama koltukta yok).
+ *
+ * Masa once tek tek ve atomik olarak kapatiliyor, iade SONRA: iade sirasinda
+ * sunucu yine duserse bir sonraki acilis ayni masaya ikinci kez iade yapmasin.
  */
 export async function yarimMasalariKapat(): Promise<number> {
+  const odemeliler = await Masa.find({ durum: 'oynaniyor', pot: { $gt: 0 } }).select('_id');
+  for (const { _id } of odemeliler) {
+    const masa = await Masa.findOneAndUpdate(
+      { _id, durum: 'oynaniyor' },
+      { $set: { durum: 'bitti', kapanmaZamani: new Date() } },
+      { new: true },
+    );
+    if (masa === null) continue;
+    const oturanlar = new Set(
+      masa.koltuklar.filter((koltuk) => !koltuk.bot).map((koltuk) => String(koltuk.oyuncu)),
+    );
+    for (const odeyen of masa.odeyenler) {
+      const oyuncuId = String(odeyen);
+      if (oturanlar.has(oyuncuId)) {
+        await cipEkle(oyuncuId, masa.giris, 'masa-iadesi', String(masa._id));
+      }
+    }
+  }
+
   const sonuc = await Masa.updateMany(
     { durum: { $ne: 'bitti' } },
     { $set: { durum: 'bitti', kapanmaZamani: new Date() } },
   );
-  return sonuc.modifiedCount;
+  return sonuc.modifiedCount + odemeliler.length;
 }

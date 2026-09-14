@@ -8,7 +8,7 @@
 // sonuctur, kaza degil. Ekran da onu oyle gosteriyor.
 
 import { API_KOKU } from './sunucu';
-import type { GirisVerisi, OyuncuOzeti, Yanit } from './protokol';
+import type { GirisVerisi, HediyeDurumu, HediyeSonucu, OyuncuOzeti, Yanit } from './protokol';
 
 /** Ag beklemesi. Uzun tutmanin anlami yok: oyuncu ekranda bekliyor. */
 const ZAMAN_ASIMI_MS = 12_000;
@@ -170,6 +170,17 @@ export const arkadasKabul = (jeton: string, oyuncuId: string): Promise<Yanit<Ark
 /** Istegi reddetmek ve arkadasligi bitirmek ayni uc: ikisi de iliskiyi siler. */
 export const arkadasSil = (jeton: string, oyuncuId: string): Promise<Yanit<ArkadasDurumu>> =>
   cagir({ yol: '/arkadas/sil', govde: { oyuncuId }, jeton });
+
+// --- Hediye cip --------------------------------------------------------------
+//
+// Saat sunucunun: birikim ve toplama orada hesaplaniyor, telefonun saati
+// ileri alinarak cip kazanilamiyor.
+
+export const hediyeDurumu = (jeton: string): Promise<Yanit<HediyeDurumu>> =>
+  cagir({ yol: '/cip/hediye', jeton });
+
+export const hediyeTopla = (jeton: string): Promise<Yanit<HediyeSonucu>> =>
+  cagir({ yol: '/cip/hediye', yontem: 'POST', jeton });
 
 // --- Push bildirimi cihaz kaydi ---------------------------------------------
 //

@@ -13,6 +13,8 @@ export default defineConfig({
       MONGO_URI: 'mongodb://127.0.0.1:27017/kut-test',
       JWT_GIZLI: 'test-ortami-icin-yeterince-uzun-sahte-anahtar',
       JWT_OMRU: '1h',
+      // Yonetim testleri kurucu korumasini bu adresle deniyor.
+      KURUCU_EPOSTA: 'kurucu@ornek.com',
     },
   },
 });

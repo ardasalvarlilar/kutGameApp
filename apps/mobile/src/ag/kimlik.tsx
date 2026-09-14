@@ -24,7 +24,13 @@ import * as api from './api';
 import { cihaziDusur, cihaziKaydet } from './bildirim';
 import { cihazKimligi, jetonuOku, jetonuSil, jetonuYaz } from './depo';
 import { soketiAc, soketiKapat, type Socket } from './soket';
-import type { GirisVerisi, OyuncuOzeti } from './protokol';
+import type {
+  CuzdanGorunumu,
+  GirisVerisi,
+  HediyeDurumu,
+  HediyeSonucu,
+  OyuncuOzeti,
+} from './protokol';
 
 export type KimlikDurumu = 'yukleniyor' | 'giris' | 'hazir';
 
@@ -56,6 +62,12 @@ export interface Kimlik {
   ) => Promise<string | null>;
   /** App Store 5.1.1(v) — hesabi ve kisisel verileri kalici olarak siler. */
   readonly hesabiSil: () => Promise<string | null>;
+
+  // --- Hediye cip ------------------------------------------------------------
+  /** Biriken hediye; oturum yoksa ya da ag hatasinda null. */
+  readonly hediyeDurumuGetir: () => Promise<HediyeDurumu | null>;
+  /** Toplar ve bakiyeyi gunceller. Hata kodu doner ya da sonucu. */
+  readonly hediyeTopla: () => Promise<HediyeSonucu | string>;
 
   // --- Arkadaslik ------------------------------------------------------------
   //
@@ -175,6 +187,20 @@ export function KimlikSaglayici({ children }: { readonly children: ReactNode }) 
     };
   }, [soket]);
 
+  // Bakiye ve seviye masada degisiyor (giris tahsili, mac odulu). Sunucu
+  // yeni ozeti kisisel odaya yolluyor; lobiye donen oyuncu guncel bakiyeyi
+  // ikinci bir istek atmadan goruyor.
+  useEffect(() => {
+    if (soket === null) return;
+    const cuzdanGeldi = (veri: CuzdanGorunumu): void => {
+      setOyuncu((onceki) => (onceki === null ? onceki : { ...onceki, ...veri }));
+    };
+    soket.on('oyuncu:cuzdan', cuzdanGeldi);
+    return () => {
+      soket.off('oyuncu:cuzdan', cuzdanGeldi);
+    };
+  }, [soket]);
+
   const misafirGir = useCallback(async (): Promise<string | null> => {
     const cihaz = await cihazKimligi();
     const sonuc = await api.misafirGir(cihaz);
@@ -284,6 +310,25 @@ export function KimlikSaglayici({ children }: { readonly children: ReactNode }) 
     await cikisYap();
     return null;
   }, [cikisYap]);
+
+  // --- Hediye cip -----------------------------------------------------------
+
+  const hediyeDurumuGetir = useCallback(async (): Promise<HediyeDurumu | null> => {
+    const jeton = jetonRef.current;
+    if (jeton === null) return null;
+    const sonuc = await api.hediyeDurumu(jeton);
+    return sonuc.ok ? sonuc.veri : null;
+  }, []);
+
+  const hediyeTopla = useCallback(async (): Promise<HediyeSonucu | string> => {
+    const jeton = jetonRef.current;
+    if (jeton === null) return 'Oturum yok';
+    const sonuc = await api.hediyeTopla(jeton);
+    if (!sonuc.ok) return sonuc.hata;
+    const { cip } = sonuc.veri;
+    setOyuncu((onceki) => (onceki === null ? onceki : { ...onceki, cip }));
+    return sonuc.veri;
+  }, []);
 
   // --- Sikayet ve engelleme -------------------------------------------------
 
@@ -405,6 +450,8 @@ export function KimlikSaglayici({ children }: { readonly children: ReactNode }) 
       adiDegistir,
       parolayiDegistir,
       hesabiSil,
+      hediyeDurumuGetir,
+      hediyeTopla,
       engellenenler,
       engelleriTazele,
       engelle,
@@ -418,6 +465,8 @@ export function KimlikSaglayici({ children }: { readonly children: ReactNode }) 
       arkadasSil,
     }),
     [
+      hediyeDurumuGetir,
+      hediyeTopla,
       durum,
       oyuncu,
       soket,

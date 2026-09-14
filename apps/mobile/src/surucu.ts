@@ -12,6 +12,7 @@
 // cevrimici surucu hicbir ekran kodunu degistirmeden yerine gecebiliyor.
 
 import type { Aksiyon, OyuncuGorunumu, OyuncuId, OyuncuKaydi } from '@kut/engine';
+import type { MacSonu } from './ag/protokol';
 
 export interface MasaSurucusu {
   /** Bu oyuncunun gordugu her sey. Gizli bilgi buradan gecmez. */
@@ -32,6 +33,8 @@ export interface MasaSurucusu {
   readonly macPuanlari: OyuncuKaydi<number>;
   /** Mac bittiyse en dusuk puanli oyuncular; bitmediyse bos. */
   readonly macKazananlari: readonly OyuncuId[];
+  /** Mac sonunda kazanilan cip ve deneyim. Cevrimdisi masada cip yok: null. */
+  readonly macSonu: MacSonu | null;
   /** El sonu tablosundan sonraki ele gecis (sn). Beklenmiyorsa null. */
   readonly turArasiSn: number | null;
   /**

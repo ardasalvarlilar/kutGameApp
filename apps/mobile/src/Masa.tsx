@@ -198,6 +198,7 @@ export function Masa({
     siraSuresi,
     macPuanlari,
     macKazananlari,
+    macSonu,
     turArasiSn,
     adlar: ADLAR,
     bagli,
@@ -1215,6 +1216,7 @@ export function Masa({
                 macPuanlari={macPuanlari}
                 tur={gorunum.tur}
                 macKazananlari={macKazananlari}
+                macSonu={macSonu}
                 {...(macKazananlari.length > 0 || turArasiSn === null
                   ? {}
                   : { geriSayimSn: turArasiSn })}

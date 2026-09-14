@@ -82,9 +82,15 @@ ve ne kadar sakladığını anlatır. Sade tutuldu: toplanan şey az.</p>
       parolanı sıfırlamak için kullanılır. Pazarlama e-postası gönderilmez.</li>
   <li><strong>Parola</strong> — düz hâli <em>hiçbir yerde saklanmaz</em>; yalnızca
       geri çevrilemez bir özeti (bcrypt) tutulur.</li>
-  <li><strong>Cihaz kimliği</strong> — misafir oynuyorsan. Uygulamanın kendi
-      ürettiği rastgele bir metindir; reklam kimliği değildir, cihazın donanım
-      numarası değildir ve başka bir uygulamayla paylaşılmaz.</li>
+  <li><strong>Cihaz kimliği</strong> — hesabını bu telefona bağlamak için.
+      iPhone'da uygulamanın kendi ürettiği rastgele bir metindir. Android'de
+      telefonun <em>bu uygulamaya özel</em> kimliğidir (ANDROID_ID): başka bir
+      uygulamanın gördüğü değerle aynı değildir. İkisi de reklam kimliği
+      değildir ve başka bir uygulamayla paylaşılmaz. Uygulamayı silip yeniden
+      kurduğunda hesabının kaybolmaması ve yeni hesaplarla başlangıç çipinin
+      tekrar tekrar alınamaması için kullanılır; sunucuda başlangıç çipinin
+      verildiğini gösteren kayıt yalnızca kimliğin geri çevrilemez bir özetiyle
+      tutulur.</li>
   <li><strong>Oyun kayıtları.</strong> Oynanan eller (dağıtım tohumu ve hamleler),
       maç puanları, oynanan/kazanılan el sayısı.</li>
 </ul>

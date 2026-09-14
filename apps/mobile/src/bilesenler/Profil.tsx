@@ -30,10 +30,13 @@ import {
   Text,
   View,
 } from 'react-native';
+import { KADEMELER, seviyeIlerlemesi } from '@kut/ekonomi';
 import { Alan, AnaDugme, Baglanti, Hata } from './Alan';
 import { Arkadaslar } from './Arkadaslar';
 import { Avatar } from './Avatar';
 import { useKimlik } from '../ag/kimlik';
+import { cipYaz } from '../cip';
+import { KADEME_ADLARI } from '../kademeGorunumu';
 import { DILLER, DIL_ADLARI, useCeviri, useDil, type MetinAnahtari } from '../dil';
 import { YASAL } from '../ag/yasal';
 import { golge, renkler } from '../tema';
@@ -135,7 +138,7 @@ export function Profil({
 
 // --- PROFİL sekmesi ----------------------------------------------------------
 
-function Kutucuk({ deger, etiket }: { readonly deger: number; readonly etiket: string }) {
+function Kutucuk({ deger, etiket }: { readonly deger: number | string; readonly etiket: string }) {
   return (
     <View style={stil.kutucuk}>
       <Text style={stil.kutucukDeger}>{deger}</Text>
@@ -150,10 +153,38 @@ function ProfilSekmesi() {
   const oyuncu = kimlik.oyuncu;
   if (oyuncu === null) return null;
 
+  const ilerleme = seviyeIlerlemesi(oyuncu.deneyim);
+  const oran = ilerleme.gereken === null ? 1 : ilerleme.buSeviyede / ilerleme.gereken;
+  const sonrakiKademe = KADEMELER.find((kademe) => kademe.minSeviye > ilerleme.seviye);
+
   return (
     <ScrollView contentContainerStyle={stil.icerik}>
+      <Text style={stil.bolum}>{t('profil.seviye', { seviye: ilerleme.seviye })}</Text>
+      <View style={stil.xpCubuk}>
+        <View style={[stil.xpDolu, { width: `${Math.round(oran * 100)}%` }]} />
+      </View>
+      <Text style={stil.aciklama}>
+        {ilerleme.gereken === null
+          ? t('profil.maksSeviye')
+          : t('profil.deneyim', {
+              bu: ilerleme.buSeviyede,
+              gereken: ilerleme.gereken,
+              kalan: ilerleme.gereken - ilerleme.buSeviyede,
+            })}
+      </Text>
+      {sonrakiKademe !== undefined ? (
+        <Text style={stil.aciklama}>
+          {t('profil.sonrakiKademe', {
+            kademe: t(KADEME_ADLARI[sonrakiKademe.kimlik]),
+            seviye: sonrakiKademe.minSeviye,
+          })}
+        </Text>
+      ) : null}
+      <Text style={stil.aciklama}>{t('profil.xpAciklama')}</Text>
+
       <Text style={stil.bolum}>{t('profil.istatistik')}</Text>
       <View style={stil.kutucukSirasi}>
+        <Kutucuk deger={cipYaz(oyuncu.cip)} etiket={t('profil.cip')} />
         <Kutucuk deger={oyuncu.oynananEl} etiket={t('profil.el')} />
         <Kutucuk deger={oyuncu.kazanilanEl} etiket={t('profil.elGalibiyeti')} />
         <Kutucuk deger={oyuncu.oynananMac} etiket={t('profil.mac')} />
@@ -399,6 +430,16 @@ const stil = StyleSheet.create({
   },
   aciklama: { color: renkler.metinSolgun, fontSize: 10, lineHeight: 14 },
   bilgi: { color: renkler.onay, fontSize: 11 },
+
+  xpCubuk: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: renkler.arkaKoyu,
+    borderWidth: 1,
+    borderColor: renkler.kenar,
+    overflow: 'hidden',
+  },
+  xpDolu: { height: '100%', backgroundColor: renkler.vurgu },
 
   kutucukSirasi: { flexDirection: 'row', gap: 6 },
   kutucuk: {

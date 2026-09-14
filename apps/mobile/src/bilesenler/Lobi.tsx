@@ -12,9 +12,8 @@
 //
 // Duzen bir HIYERARSI kuruyor, eskisinden farkli bir GORUNUMLE:
 //
-//   1. Ust bar: kimlik (avatar, ad, seviye, baglanti durumu) solda, sag
-//      tarafta AYARLAR. Jeton/bilet icin bosluk simdiden ayrilmis ama
-//      GORUNMUYOR — henuz bir ekonomi yok, yalnizca yer korunuyor.
+//   1. Ust bar: kimlik (avatar, ad, seviye + XP cubugu, baglanti durumu)
+//      solda; sagda cip bakiyesi (dokununca magaza) ve AYARLAR.
 //   2. Sol serit: arkadas seridi (acik masasi olan arkadaslar) ve ogretici
 //      banner'i. Ikisi de tek dokunusla bir yere goturuyor.
 //   3. Orta: yatay kaydirilan renkli kartlar — MASA BUL, ÖZEL MASA,
@@ -48,11 +47,13 @@ import {
   Text,
   View,
 } from 'react-native';
+import { seviyeIlerlemesi } from '@kut/ekonomi';
 import { Alan, AnaDugme, Hata } from './Alan';
 import { Avatar } from './Avatar';
 import { useCeviri } from '../dil';
 import type { ArkadasDurumu } from '../ag/api';
 import type { OyuncuOzeti } from '../ag/protokol';
+import { cipKisa } from '../cip';
 import { golge, renkler, tasRenkleri, okeyRengi } from '../tema';
 
 export interface LobiOzellikleri {
@@ -70,6 +71,18 @@ export interface LobiOzellikleri {
   /** Ogreticiyi dogrudan baslatir — ilk giristeki soruyu atlayarak. */
   readonly onOgretici: () => void;
   readonly onProfil: () => void;
+  readonly onMagaza: () => void;
+}
+
+/** Seviye rozetinin altindaki ince cubuk: bu seviyede biriken XP. */
+function XpCubugu({ deneyim }: { readonly deneyim: number }) {
+  const { buSeviyede, gereken } = seviyeIlerlemesi(deneyim);
+  const oran = gereken === null ? 1 : buSeviyede / gereken;
+  return (
+    <View style={stil.xpCubuk}>
+      <View style={[stil.xpDolu, { width: `${Math.round(oran * 100)}%` }]} />
+    </View>
+  );
 }
 
 /**
@@ -211,6 +224,7 @@ export function Lobi({
   onAlistirma,
   onOgretici,
   onProfil,
+  onMagaza,
 }: LobiOzellikleri) {
   const [kod, setKod] = useState('');
   const t = useCeviri();
@@ -249,6 +263,7 @@ export function Lobi({
                 </View>
               ) : null}
             </View>
+            {oyuncu !== null ? <XpCubugu deneyim={oyuncu.deneyim} /> : null}
             <View style={stil.durumSatiri}>
               <View style={[stil.nokta, bagli ? stil.noktaAcik : stil.noktaKapali]} />
               <Text style={stil.durumYazi}>{t(bagli ? 'lobi.bagli' : 'lobi.baglaniyor')}</Text>
@@ -258,10 +273,19 @@ export function Lobi({
 
         <View style={stil.ustBosluk} />
 
-        {/* Jeton ve bilet ekonomisi henuz yok. Yerleri simdiden ayriliyor ki
-            sonradan eklendiginde komsu ogeler kaymasin — GORUNMUYORLAR. */}
-        <View style={stil.rezerveJeton} />
-        <View style={stil.rezerveBilet} />
+        {/* Cip bakiyesi. Kisa bicimde ("1,5M"): tam sayi kademe secimi ve
+            magazada yaziyor, burada yer dar. */}
+        <Pressable
+          onPress={onMagaza}
+          hitSlop={6}
+          style={({ pressed }) => [stil.cipHapi, pressed && stil.eylemBasili]}
+        >
+          <View style={stil.cipDaire} />
+          <Text style={stil.cipYazi}>{cipKisa(oyuncu?.cip ?? 0)}</Text>
+          <View style={stil.cipArti}>
+            <Text style={stil.cipArtiYazi}>+</Text>
+          </View>
+        </Pressable>
 
         <Pressable
           onPress={onProfil}
@@ -427,9 +451,45 @@ const stil = StyleSheet.create({
 
   ustBosluk: { flex: 1 },
 
-  // Jeton/bilet: yer ayrilmis, icerik yok — bu yuzden gorunmez kalıyorlar.
-  rezerveJeton: { width: 78, height: 30 },
-  rezerveBilet: { width: 58, height: 30 },
+  xpCubuk: {
+    height: 3,
+    width: 90,
+    borderRadius: 2,
+    backgroundColor: renkler.arkaKoyu,
+    overflow: 'hidden',
+  },
+  xpDolu: { height: '100%', backgroundColor: renkler.vurgu },
+
+  cipHapi: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    height: 30,
+    paddingLeft: 5,
+    paddingRight: 4,
+    borderRadius: 15,
+    backgroundColor: renkler.panelKoyu,
+    borderWidth: 1,
+    borderColor: renkler.vurguKoyu,
+  },
+  cipDaire: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: renkler.vurgu,
+    borderWidth: 3,
+    borderColor: renkler.vurguKoyu,
+  },
+  cipYazi: { color: renkler.vurgu, fontSize: 13, fontWeight: '900', minWidth: 34 },
+  cipArti: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: renkler.onay,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cipArtiYazi: { color: '#0b2717', fontSize: 14, fontWeight: '900', marginTop: -1 },
 
   ayarlarDugmesi: {
     width: 34,

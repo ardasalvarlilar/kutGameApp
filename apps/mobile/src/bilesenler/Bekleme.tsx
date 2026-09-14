@@ -29,10 +29,13 @@
 
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { OyuncuId } from '@kut/engine';
+import { kazananPayi, potHesapla } from '@kut/ekonomi';
 import { AnaDugme, Hata } from './Alan';
 import { Avatar } from './Avatar';
 import { useCeviri } from '../dil';
 import type { KoltukGorunumu, MasaGorunumu } from '../ag/protokol';
+import { cipYaz } from '../cip';
+import { KADEME_ADLARI, KADEME_RENKLERI } from '../kademeGorunumu';
 import { SABIT_REFERANS, masaKonumlari, type Konum } from '../masaDuzeni';
 import { golge, renkler } from '../tema';
 
@@ -169,6 +172,10 @@ export function Bekleme({
   // Masa dolu ama biri "hazir degilim" demis olabilir: sunucu dordu de hazir
   // olmadan eli dagitmiyor. "El birazdan dagitiliyor" demek yanlis olurdu.
   const bekleyenSayisi = insanlar.filter((koltuk) => !koltuk.hazir).length;
+  // Botlar pota girmez (@kut/ekonomi odul.ts): odul OTURAN INSAN sayisindan.
+  // Bot eklendikce odulun dustugunu burada gormek, "botla oynayayim mi"
+  // kararinin bedelini acik ediyor.
+  const odul = kazananPayi(potHesapla(Math.max(1, insanlar.length), masa.giris), 1);
 
   /** BANA gelen talepler: benim oturdugum koltugu isteyenler. */
   const banaGelenler =
@@ -195,6 +202,13 @@ export function Bekleme({
         <Text style={stil.aciklama}>
           {t(masa.ozel ? 'bekleme.ozelAciklama' : 'bekleme.acikAciklama')}
         </Text>
+        <Text style={[stil.kademe, { color: KADEME_RENKLERI[masa.kademe] }]}>
+          {t('bekleme.kademeBilgisi', {
+            kademe: t(KADEME_ADLARI[masa.kademe]),
+            giris: cipYaz(masa.giris),
+          })}
+        </Text>
+        <Text style={stil.odul}>{t('bekleme.odul', { odul: cipYaz(odul) })}</Text>
         <Text style={stil.sayac}>
           {bosSayisi > 0
             ? t('bekleme.bosKoltukSayisi', { sayi: bosSayisi })
@@ -329,6 +343,8 @@ const stil = StyleSheet.create({
   kod: { color: renkler.vurgu, fontSize: 60, fontWeight: '900', letterSpacing: 9 },
   aciklama: { color: renkler.metinSolgun, fontSize: 11, textAlign: 'center', maxWidth: 300 },
   sayac: { color: renkler.metin, fontSize: 13, fontWeight: '700', marginTop: 8 },
+  kademe: { fontSize: 12, fontWeight: '900', letterSpacing: 0.4, marginTop: 6 },
+  odul: { color: renkler.onay, fontSize: 12, fontWeight: '800' },
 
   botKutusu: {
     marginTop: 14,

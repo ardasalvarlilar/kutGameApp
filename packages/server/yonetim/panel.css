@@ -1,0 +1,155 @@
+:root {
+  color-scheme: dark;
+  --arka: #0b2739;
+  --arka-koyu: #071c2a;
+  --panel: #123c52;
+  --panel-koyu: #0d2f40;
+  --kenar: #1d5872;
+  --metin: #e9f3f8;
+  --solgun: #7fa8bd;
+  --vurgu: #f2c14e;
+  --uyari: #e5734b;
+  --onay: #4fbf87;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--arka);
+  color: var(--metin);
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+button, input, select, textarea { font: inherit; color: inherit; }
+
+button {
+  cursor: pointer;
+  border: 1px solid var(--kenar);
+  background: var(--panel);
+  border-radius: 7px;
+  padding: 6px 12px;
+  font-weight: 700;
+}
+button:hover { border-color: var(--vurgu); }
+button:disabled { opacity: 0.5; cursor: default; }
+button.vurgu { background: var(--vurgu); color: #1a1400; border-color: var(--vurgu); }
+button.tehlike { border-color: var(--uyari); color: var(--uyari); background: transparent; }
+button.onay { border-color: var(--onay); color: var(--onay); background: transparent; }
+
+input, select, textarea {
+  background: var(--arka-koyu);
+  border: 1px solid var(--kenar);
+  border-radius: 7px;
+  padding: 7px 10px;
+  min-width: 0;
+}
+input:focus, select:focus, textarea:focus { outline: 1px solid var(--vurgu); }
+
+a { color: var(--vurgu); cursor: pointer; }
+
+.marka { color: var(--vurgu); font-weight: 900; letter-spacing: 5px; font-size: 20px; }
+
+/* --- Giris --- */
+.giris {
+  max-width: 340px;
+  margin: 12vh auto 0;
+  padding: 24px;
+  background: var(--panel-koyu);
+  border: 1px solid var(--kenar);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.giris label { font-size: 11px; color: var(--solgun); font-weight: 800; letter-spacing: 1px; }
+
+/* --- Ust bar ve sekmeler --- */
+.ust {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--kenar);
+  background: var(--arka-koyu);
+  flex-wrap: wrap;
+}
+.ust .bosluk { flex: 1; }
+.sekmeler { display: flex; gap: 4px; flex-wrap: wrap; }
+.sekmeler button { background: transparent; border-color: transparent; color: var(--solgun); }
+.sekmeler button.acik { color: var(--vurgu); border-color: var(--vurgu); }
+.rozet {
+  display: inline-block;
+  background: var(--uyari);
+  color: #1a0a00;
+  border-radius: 9px;
+  padding: 0 7px;
+  font-size: 11px;
+  font-weight: 900;
+  margin-left: 5px;
+}
+
+main { padding: 20px; max-width: 1200px; margin: 0 auto; }
+
+h2 { font-size: 15px; letter-spacing: 1px; color: var(--vurgu); margin: 22px 0 8px; }
+h2:first-child { margin-top: 0; }
+
+.kartlar { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+.kart {
+  background: var(--panel-koyu);
+  border: 1px solid var(--kenar);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.kart .deger { font-size: 22px; font-weight: 900; }
+.kart .etiket { font-size: 11px; color: var(--solgun); font-weight: 700; letter-spacing: 0.5px; }
+
+.arac { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+.arac input { flex: 1; min-width: 200px; }
+
+.tablo-kap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--kenar); vertical-align: top; }
+th { font-size: 11px; color: var(--solgun); letter-spacing: 0.5px; font-weight: 800; }
+tr.tikla { cursor: pointer; }
+tr.tikla:hover td { background: var(--panel-koyu); }
+td.sayi, th.sayi { text-align: right; font-variant-numeric: tabular-nums; }
+.arti { color: var(--onay); }
+.eksi { color: var(--uyari); }
+.solgun { color: var(--solgun); }
+.etiketler span {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  border-radius: 5px;
+  padding: 0 6px;
+  margin-right: 4px;
+  border: 1px solid var(--kenar);
+  color: var(--solgun);
+}
+.etiketler .admin { border-color: var(--vurgu); color: var(--vurgu); }
+.etiketler .askida { border-color: var(--uyari); color: var(--uyari); }
+
+/* --- Oyuncu ayrintisi --- */
+.ayrinti { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 800px) { .ayrinti { grid-template-columns: minmax(0, 1fr); } }
+.kutu {
+  background: var(--panel-koyu);
+  border: 1px solid var(--kenar);
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.kutu h3 { margin: 0; font-size: 12px; letter-spacing: 1px; color: var(--solgun); }
+.bilgi { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; }
+.bilgi dt { color: var(--solgun); font-size: 12px; }
+.bilgi dd { margin: 0; word-break: break-word; }
+.satir { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.satir input, .satir select { flex: 1; min-width: 120px; }
+
+.mesaj { padding: 8px 12px; border-radius: 8px; margin-bottom: 10px; }
+.mesaj.hata { background: rgba(229, 115, 75, 0.15); color: var(--uyari); }
+.mesaj.tamam { background: rgba(79, 191, 135, 0.15); color: var(--onay); }

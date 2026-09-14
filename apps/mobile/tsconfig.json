@@ -6,7 +6,8 @@
     "jsx": "react-jsx",
     "paths": {
       "@kut/engine": ["../../packages/engine/src/index.ts"],
-      "@kut/politika": ["../../packages/politika/src/index.ts"]
+      "@kut/politika": ["../../packages/politika/src/index.ts"],
+      "@kut/ekonomi": ["../../packages/ekonomi/src/index.ts"]
     }
   },
   "include": ["**/*.ts", "**/*.tsx"],

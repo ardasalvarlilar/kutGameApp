@@ -18,5 +18,5 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   // Yerel calisan bagimliliklar bundle'a girmesin; node_modules'tan gelsinler.
-  noExternal: ['@kut/engine', '@kut/politika'],
+  noExternal: ['@kut/engine', '@kut/politika', '@kut/ekonomi'],
 });
